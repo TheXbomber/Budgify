@@ -25,11 +25,11 @@ class FinanceRepository(
 ) {
 
     // TRANSACTIONS
-//    fun getAllTransactions(): Flow<List<MyTransaction>> {
-//        return transactionDao.getAllTransactions()
+//    fun getAllTransactions(userId: String): Flow<List<MyTransaction>> {
+//        return transactionDao.getAllTransactions(userId)
 //    }
-    fun getAllTransactionsWithDetails(): Flow<List<TransactionWithDetails>> {
-        return transactionDao.getAllTransactionsWithDetails()
+    fun getAllTransactionsWithDetails(userId: String): Flow<List<TransactionWithDetails>> {
+        return transactionDao.getAllTransactionsWithDetails(userId)
     }
     suspend fun getTransactionById(transactionId: Int): MyTransaction? = transactionDao.getTransactionById(transactionId)
 
@@ -46,8 +46,8 @@ class FinanceRepository(
     }
 
     // OBJECTIVES
-    fun getAllObjectives(): Flow<List<Objective>> {
-        return objectiveDao.getAllGoalsByDate()
+    fun getAllObjectives(userId: String): Flow<List<Objective>> {
+        return objectiveDao.getAllGoalsByDate(userId)
     }
     suspend fun insertObjective(objective: Objective) {
         objectiveDao.insert(objective)
@@ -74,8 +74,8 @@ class FinanceRepository(
     suspend fun getInitialUserXp(): Int = userPreferencesRepository.getInitialUserXp()
 
     //CATEGORIES
-    fun getAllCategories(): Flow<List<Category>> {
-        return categoryDao.getAllCategories()
+    fun getAllCategories(userId: String): Flow<List<Category>> {
+        return categoryDao.getAllCategories(userId)
     }
     suspend fun insertCategory(category: Category): Long {
         return categoryDao.insert(category)
@@ -93,21 +93,21 @@ class FinanceRepository(
         categoryDao.update(category)
     }
 
-    suspend fun getCategoryByDescription(description: String): Category? {
-        return categoryDao.getCategoryByDescriptionSuspend(description)
+    suspend fun getCategoryByDescription(description: String, userId: String): Category? {
+        return categoryDao.getCategoryByDescriptionSuspend(description, userId)
     }
 
     // ACCOUNTS
-    fun getAllAccounts(): Flow<List<Account>> {
-        return accountDao.getAllAccounts()
+    fun getAllAccounts(userId: String): Flow<List<Account>> {
+        return accountDao.getAllAccounts(userId)
     }
     suspend fun insertAccount(account: Account) {
         accountDao.insert(account)
     }
     // Inside your FinanceRepository class
     suspend fun getAccountById(accountId: Int): Account? = accountDao.getAccountById(accountId)
-    suspend fun getTransactionsForAccount(accountId: Int): List<MyTransaction> {
-        return transactionDao.getTransactionsForAccount(accountId)
+    suspend fun getTransactionsForAccount(accountId: Int, userId: String): List<MyTransaction> {
+        return transactionDao.getTransactionsForAccount(accountId, userId)
     }
     suspend fun updateAccount(account: Account) {
         accountDao.update(account)
@@ -122,7 +122,7 @@ class FinanceRepository(
 
         if (account != null) {
             // Get all transactions for this account
-            val transactionsForAccount = transactionDao.getTransactionsForAccount(accountId)
+            val transactionsForAccount = transactionDao.getTransactionsForAccount(accountId, account.userId)
             Log.d("FinanceRepository", "Transactions for account $accountId: $transactionsForAccount")
             // Calculate the new balance
             var newBalance = 0.0
@@ -137,8 +137,8 @@ class FinanceRepository(
     }
 
     // LOANS --- Nuova sezione per i Prestiti ---
-    fun getAllLoans(): Flow<List<Loan>> {
-        return loanDao.getAllLoans()
+    fun getAllLoans(userId: String): Flow<List<Loan>> {
+        return loanDao.getAllLoans(userId)
     }
 
     suspend fun insertLoan(loan: Loan) {

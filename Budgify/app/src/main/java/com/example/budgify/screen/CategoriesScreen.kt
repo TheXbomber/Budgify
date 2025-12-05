@@ -203,7 +203,9 @@ fun CategoriesScreen(
                 CategoriesTab.Income -> CategoryType.INCOME
             },
             onDismiss = { categoriesViewModel.onDismissAddCategoryDialog() },
-            onCategoryAdd = { category -> categoriesViewModel.addCategory(category) }
+            onCategoryAdd = { description, type ->
+                categoriesViewModel.addCategory(description, type)
+            }
         )
     }
 
@@ -220,7 +222,9 @@ fun CategoriesScreen(
             EditCategoryDialog(
                 category = category,
                 onDismiss = { categoriesViewModel.onDismissEditCategoryDialog() },
-                onCategoryUpdate = { categoriesViewModel.updateCategory(it) }
+                onCategoryUpdate = { description ->
+                    categoriesViewModel.updateCategory(description)
+                }
             )
         }
     }
@@ -378,7 +382,7 @@ fun CategoryGridSection(
 fun AddCategoryDialog(
     initialType: CategoryType?,
     onDismiss: () -> Unit,
-    onCategoryAdd: (Category) -> Unit
+    onCategoryAdd: (String, CategoryType) -> Unit
 ) {
     var description by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(initialType ?: CategoryType.EXPENSE) }
@@ -464,11 +468,7 @@ fun AddCategoryDialog(
                         onClick = {
                             val finalDescription = description.trim()
                             if (finalDescription.isNotBlank()) {
-                                val newCategory = Category(
-                                    type = selectedType,
-                                    desc = finalDescription
-                                )
-                                onCategoryAdd(newCategory)
+                                onCategoryAdd(finalDescription, selectedType)
                             }
                         },
                         enabled = description.trim().isNotBlank(),
@@ -523,7 +523,7 @@ fun CategoryActionChoiceDialog(
 fun EditCategoryDialog(
     category: Category,
     onDismiss: () -> Unit,
-    onCategoryUpdate: (Category) -> Unit
+    onCategoryUpdate: (String) -> Unit
 ) {
     var description by remember { mutableStateOf(category.desc) }
     var showError by remember { mutableStateOf(false) }
@@ -582,8 +582,7 @@ fun EditCategoryDialog(
                         onClick = {
                             val finalDescription = description.trim()
                             if (finalDescription.isNotBlank()) {
-                                val updatedCategory = category.copy(desc = finalDescription)
-                                onCategoryUpdate(updatedCategory)
+                                onCategoryUpdate(finalDescription)
                             }
                         },
                         enabled = description.trim().isNotBlank() && description.trim() != category.desc

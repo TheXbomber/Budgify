@@ -2,7 +2,6 @@ package com.example.budgify.database
 
 import android.content.Context
 import android.util.Log
-import androidx.activity.result.launch
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -14,15 +13,16 @@ import com.example.budgify.dataaccessobjects.CategoryDao
 import com.example.budgify.dataaccessobjects.LoanDao
 import com.example.budgify.dataaccessobjects.ObjectiveDao
 import com.example.budgify.dataaccessobjects.TransactionDao
+import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.entities.Account
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.CategoryType
-import com.example.budgify.entities.DefaultCategories
 import com.example.budgify.entities.Loan
 import com.example.budgify.entities.MyTransaction
 import com.example.budgify.entities.Objective
 import com.example.budgify.entities.ObjectiveType
 import com.example.budgify.entities.TransactionType
+import com.example.budgify.entities.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,20 +82,20 @@ class Converters {
         Account::class,
         Objective::class,
         Category::class,
-        Loan::class
+        Loan::class,
+        User::class
    ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class) // Se hai bisogno di TypeConverters
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun accountDao(): AccountDao
-    abstract fun goalDao(): ObjectiveDao
+    abstract fun objectiveDao(): ObjectiveDao
     abstract fun categoryDao(): CategoryDao
     abstract fun loanDao(): LoanDao
-
-
+    abstract fun userDao(): UserDao
 
     companion object {
         @Volatile
@@ -108,57 +108,11 @@ abstract class FinanceDatabase : RoomDatabase() {
                     FinanceDatabase::class.java,
                     "finance_database" // Il nome del tuo file database
                 )
-                    // Wipes and rebuilds instead of migrating if no Migration object.
-                    // Migration is not covered in this codelab.
                     .fallbackToDestructiveMigration()
-                    .addCallback(FinanceDatabaseCallback(scope))
                     .build()
                 INSTANCE = instance
                 instance
             }
-        }
-    }
-
-    private class FinanceDatabaseCallback(
-        private val scope: CoroutineScope
-    ) : Callback() {
-
-        override fun onCreate(db: SupportSQLiteDatabase) {
-            super.onCreate(db)
-            INSTANCE?.let { database ->
-                scope.launch(Dispatchers.IO) { // Perform on a background thread
-                    populateDatabase(database.categoryDao())
-                }
-            }
-        }
-
-        suspend fun populateDatabase(categoryDao: CategoryDao) {
-            // Add default categories if the table is empty (which it will be on first create)
-            // You could add a check here if needed, but onCreate is usually sufficient.
-
-            // Check if default categories already exist (optional, but good for robustness
-            // if this callback were ever called under different circumstances, though onCreate is reliable)
-            // Check for existence before inserting
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.OBJECTIVES_EXP.desc) == null) {
-                categoryDao.insert(DefaultCategories.OBJECTIVES_EXP)
-            }
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.OBJECTIVES_INC.desc) == null) {
-                categoryDao.insert(DefaultCategories.OBJECTIVES_INC)
-            }
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.CREDIT_EXP.desc) == null) {
-                categoryDao.insert(DefaultCategories.CREDIT_EXP)
-            }
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.CREDIT_INC.desc) == null) {
-                categoryDao.insert(DefaultCategories.CREDIT_INC)
-            }
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.DEBT_EXP.desc) == null) {
-                categoryDao.insert(DefaultCategories.DEBT_EXP)
-            }
-            if (categoryDao.getCategoryByDescriptionSuspend(DefaultCategories.DEBT_INC.desc) == null) {
-                categoryDao.insert(DefaultCategories.DEBT_INC)
-            }
-            // You can log here if needed
-            Log.d("AppDatabase", "Default categories pre-populated.")
         }
     }
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -109,25 +110,36 @@ class CategoriesViewModel(private val financeViewModel: FinanceViewModel) : View
         _uiState.value = _uiState.value.copy(snackbarMessage = null)
     }
 
-    fun addCategory(category: Category) {
+    fun addCategory(description: String, type: CategoryType) {
         viewModelScope.launch {
-            financeViewModel.addCategory(category) {
-                _uiState.value = _uiState.value.copy(
-                    showAddDialog = false,
-                    snackbarMessage = "Category '${it.desc}' added"
+            val userId = financeViewModel.userId.first()
+            if (userId != null) {
+                val newCategory = Category(
+                    userId = userId,
+                    type = type,
+                    desc = description
                 )
+                financeViewModel.addCategory(newCategory) {
+                    _uiState.value = _uiState.value.copy(
+                        showAddDialog = false,
+                        snackbarMessage = "Category '${it.desc}' added"
+                    )
+                }
             }
         }
     }
 
-    fun updateCategory(category: Category) {
+    fun updateCategory(description: String) {
         viewModelScope.launch {
-            financeViewModel.updateCategory(category)
-            _uiState.value = _uiState.value.copy(
-                showEditCategoryDialog = false,
-                categoryToAction = null,
-                snackbarMessage = "Category '${category.desc}' updated"
-            )
+            _uiState.value.categoryToAction?.let {
+                val updatedCategory = it.copy(desc = description)
+                financeViewModel.updateCategory(updatedCategory)
+                _uiState.value = _uiState.value.copy(
+                    showEditCategoryDialog = false,
+                    categoryToAction = null,
+                    snackbarMessage = "Category '${updatedCategory.desc}' updated"
+                )
+            }
         }
     }
 

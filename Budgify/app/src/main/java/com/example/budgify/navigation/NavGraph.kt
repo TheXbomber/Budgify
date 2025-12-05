@@ -1,32 +1,15 @@
 package com.example.budgify.navigation
 
-import android.content.Context
 import android.util.Log
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -35,7 +18,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.budgify.applicationlogic.FinanceApplication
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
+import com.example.budgify.auth.AuthViewModelFactory
+import com.example.budgify.auth.LoginScreen
+import com.example.budgify.auth.RegistrationScreen
 import com.example.budgify.entities.LoanType
 import com.example.budgify.factory.ViewModelFactory
 import com.example.budgify.routes.ARG_INITIAL_LOAN_TYPE
@@ -50,7 +38,6 @@ import com.example.budgify.screen.Settings
 import com.example.budgify.screen.TransactionsScreen
 import com.example.budgify.userpreferences.AppTheme
 import com.example.budgify.userpreferences.ThemePreferenceManager
-import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.viewmodel.CategoriesViewModel
 import com.example.budgify.viewmodel.CredDebManagementViewModel
 import com.example.budgify.viewmodel.CreditsDebitsViewModel
@@ -65,10 +52,17 @@ fun NavGraph(
     viewModel: FinanceViewModel,
     themePreferenceManager: ThemePreferenceManager,
     onThemeChange: (AppTheme) -> Unit,
-    startDestination: String,
-    onForgotPinClicked: () -> Unit,
     navController: NavHostController = rememberNavController()
 ) {
+    val context = LocalContext.current
+    val application = context.applicationContext as FinanceApplication
+    val authViewModel: AuthViewModel = viewModel(
+        factory = AuthViewModelFactory(
+            application.database.userDao(),
+            application.database.categoryDao()
+        )
+    )
+
     val showAddTransactionDialog by viewModel.showAddTransactionDialog.collectAsStateWithLifecycle()
     val showAddObjectiveDialog by viewModel.showAddObjectiveDialog.collectAsStateWithLifecycle()
     val showAddLoanDialog by viewModel.showAddLoanDialog.collectAsStateWithLifecycle()
@@ -97,18 +91,34 @@ fun NavGraph(
         )
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable(ScreenRoutes.AccessPin.route) {
-            PinEntryScreen(
-                onPinCorrect = {
+    NavHost(navController = navController, startDestination = "splash") {
+        composable("splash") {
+            SplashScreen(navController = navController, authViewModel = authViewModel)
+        }
+        composable("login") {
+            LoginScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                onLoginSuccess = {
+                    viewModel.onUserLoggedIn()
                     navController.navigate(ScreenRoutes.Home.route) {
-                        popUpTo(ScreenRoutes.AccessPin.route) { inclusive = true }
+                        popUpTo("login") { inclusive = true }
                     }
-                },
-                onForgotPin = onForgotPinClicked
+                }
             )
         }
-
+        composable("registration") {
+            RegistrationScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                onRegistrationSuccess = {
+                    viewModel.onUserLoggedIn()
+                    navController.navigate(ScreenRoutes.Home.route) {
+                        popUpTo("registration") { inclusive = true }
+                    }
+                }
+            )
+        }
         composable(ScreenRoutes.Categories.route) {
             val factory = ViewModelFactory(viewModel)
             val categoriesViewModel: CategoriesViewModel = viewModel(factory = factory)
@@ -174,70 +184,25 @@ fun NavGraph(
 }
 
 @Composable
-fun PinEntryScreen(
-    onPinCorrect: () -> Unit,
-    onForgotPin: () -> Unit
-) {
-    var enteredPin by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    val context = LocalContext.current
+fun SplashScreen(navController: NavHostController, authViewModel: AuthViewModel) {
+    val user by authViewModel.user.collectAsStateWithLifecycle()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Enter Access PIN", style = MaterialTheme.typography.headlineSmall)
-
-            TextField(
-                value = enteredPin,
-                onValueChange = {
-                    if (it.length <= 6) {
-                        enteredPin = it
-                    }
-                    errorMessage = null
-                },
-                label = { Text("PIN") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            errorMessage?.let { message ->
-                Text(
-                    text = message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
+    LaunchedEffect(user) {
+        if (user != null) {
+            navController.navigate(ScreenRoutes.Home.route) {
+                popUpTo("splash") { inclusive = true }
             }
-
-            Button(
-                onClick = {
-                    val savedPin = getSavedPinFromContext(context)
-                    if (enteredPin == savedPin && savedPin != null) {
-                        onPinCorrect()
-                    } else {
-                        errorMessage = "Incorrect PIN"
-                        enteredPin = ""
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enteredPin.isNotBlank()
-            ) {
-                Text("Submit")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            TextButton(onClick = onForgotPin) {
-                Text("Forgot PIN?")
+        } else {
+            navController.navigate("login") {
+                popUpTo("splash") { inclusive = true }
             }
         }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
     }
 }

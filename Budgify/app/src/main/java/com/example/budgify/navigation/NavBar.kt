@@ -295,6 +295,7 @@ fun AddTransactionDialog(
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var descriptionError by remember { mutableStateOf<String?>(null) }
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -508,8 +509,9 @@ fun AddTransactionDialog(
                     enabled = description.isNotBlank() && amount.isNotBlank() && selectedDate != null && selectedAccountId != null,
                     onClick = {
                         val amountDouble = amount.toDoubleOrNull()
-                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && selectedAccountId != null) {
+                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && selectedAccountId != null && userId != null) {
                             val newTransaction = MyTransaction(
+                                userId = userId!!,
                                 accountId = selectedAccountId!!,
                                 type = selectedType,
                                 date = selectedDate!!,
@@ -569,11 +571,14 @@ fun AddTransactionDialog(
         AddCategoryDialog(
             onDismiss = { showAddCategoryDialog = false },
             initialType = null,
-            onCategoryAdd = { newCategory ->
-                viewModel.addCategory(newCategory) {
-                    selectedCategoryId = it.id
-                    selectedCategory = it
-                    showAddCategoryDialog = false
+            onCategoryAdd = { description, type ->
+                if (userId != null) {
+                    val newCategory = Category(userId = userId!!, type = type, desc = description)
+                    viewModel.addCategory(newCategory) {
+                        selectedCategoryId = it.id
+                        selectedCategory = it
+                        showAddCategoryDialog = false
+                    }
                 }
             }
         )
@@ -593,6 +598,7 @@ fun AddObjectiveDialog(
     var selectedType by remember { mutableStateOf(ObjectiveType.EXPENSE) }
     var showDatePickerDialog by remember { mutableStateOf(false) }
     val objectiveTypes = ObjectiveType.entries.toList()
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     var descriptionError by remember { mutableStateOf<String?>(null) }
 
@@ -697,8 +703,9 @@ fun AddObjectiveDialog(
                     enabled = description.isNotBlank() && amount.isNotBlank() && selectedDate != null,
                     onClick = {
                         val amountDouble = amount.toDoubleOrNull()
-                        if (description.isNotBlank() && amountDouble != null && selectedDate != null) {
+                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && userId != null) {
                             val newObjective = Objective(
+                                userId = userId!!,
                                 id = 0,
                                 type = selectedType,
                                 desc = description,
@@ -768,6 +775,7 @@ fun AddLoanDialog(
     var selectedEndDate by remember { mutableStateOf<LocalDate?>(null) }
     var selectedType by remember { mutableStateOf(LoanType.DEBT) }
     val loanTypes = LoanType.entries.toList()
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     val accounts by viewModel.allAccounts.collectAsStateWithLifecycle()
     var accountExpanded by remember { mutableStateOf(false) }
@@ -1007,17 +1015,19 @@ fun AddLoanDialog(
                             triggerError("End date cannot be before the start date.")
                             return@Button
                         }
-
-                        val newLoan = Loan(
-                            desc = description,
-                            amount = amountDouble,
-                            type = selectedType,
-                            startDate = selectedStartDate!!,
-                            endDate = selectedEndDate
-                        )
-                        viewModel.addLoan(newLoan, selectedAccountId!!)
-                        onLoanAdded(newLoan)
-                        onDismiss()
+                        if (userId != null) {
+                            val newLoan = Loan(
+                                userId = userId!!,
+                                desc = description,
+                                amount = amountDouble,
+                                type = selectedType,
+                                startDate = selectedStartDate!!,
+                                endDate = selectedEndDate
+                            )
+                            viewModel.addLoan(newLoan, selectedAccountId!!)
+                            onLoanAdded(newLoan)
+                            onDismiss()
+                        }
                     }
                 ) {
                     Text("Add")

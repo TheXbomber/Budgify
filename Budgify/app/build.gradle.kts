@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     // Aggiungi questa riga per il plugin KAPT
     id("org.jetbrains.kotlin.kapt")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -38,6 +39,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -69,6 +71,12 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.1")
 
     implementation("androidx.security:security-crypto:1.1.0-alpha07")
+
+    // Firebase - Use the BOM to manage versions
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
 
 
     testImplementation(libs.junit)

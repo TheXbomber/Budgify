@@ -682,12 +682,7 @@ fun AddAccountDialog(
                     onClick = {
                         val balanceDouble = initialBalance.replace(',', '.').toDoubleOrNull()
                         if (balanceDouble != null) {
-                            val newAccount = Account(
-                                title = accountTitle.trim(),
-                                amount = balanceDouble,
-                                initialAmount = balanceDouble
-                            )
-                            viewModel.addAccount(newAccount)
+                            viewModel.addAccount(accountTitle.trim(), balanceDouble)
                         }
                     }) {
                     Text("Add")
@@ -747,12 +742,7 @@ fun EditAccountDialog(
             ) {
                 Button(
                     onClick = {
-                        val newDisplayedBalanceDouble = currentBalanceDisplayString.replace(',', '.').toDoubleOrNull()
-                        if (newDisplayedBalanceDouble != null && accountTitle.isNotBlank()) {
-                            val balanceDifference = newDisplayedBalanceDouble - accountToEdit.amount
-                            val newCalculatedInitialAmount = accountToEdit.initialAmount + balanceDifference
-                            viewModel.updateAccount(accountToEdit, accountTitle, newCalculatedInitialAmount)
-                        }
+                        viewModel.updateAccount(accountToEdit, accountTitle, currentBalanceDisplayString)
                     }
                 ) {
                     Text("Save Changes")
