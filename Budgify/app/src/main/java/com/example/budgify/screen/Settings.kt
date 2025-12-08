@@ -108,7 +108,7 @@ fun Settings(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,
@@ -200,27 +200,6 @@ fun Settings(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // User Info and Logout Button
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                user?.email?.let {
-                    Text("Logged in as: $it")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            authViewModel.logout()
-                            navController.navigate("login") {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("Logout")
-                    }
-                }
-            }
         }
         if (uiState.showResetConfirmationDialog) {
             ResetConfirmationDialog(

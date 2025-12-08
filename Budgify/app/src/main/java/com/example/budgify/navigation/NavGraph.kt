@@ -128,22 +128,22 @@ fun NavGraph(
         composable(ScreenRoutes.Categories.route) {
             val factory = ViewModelFactory(financeViewModel)
             val categoriesViewModel: CategoriesViewModel = viewModel(factory = factory)
-            CategoriesScreen(navController, financeViewModel, categoriesViewModel)
+            CategoriesScreen(navController, financeViewModel, categoriesViewModel, authViewModel)
         }
         composable(ScreenRoutes.Home.route) {
             val factory = ViewModelFactory(financeViewModel)
             val homepageViewModel: HomepageViewModel = viewModel(factory = factory)
-            Homepage(navController, financeViewModel, homepageViewModel)
+            Homepage(navController, financeViewModel, homepageViewModel, authViewModel)
         }
         composable(ScreenRoutes.Objectives.route) {
             val factory = ViewModelFactory(financeViewModel)
             val objectivesViewModel: ObjectivesViewModel = viewModel(factory = factory)
-            ObjectivesScreen(navController, financeViewModel, objectivesViewModel)
+            ObjectivesScreen(navController, financeViewModel, objectivesViewModel, authViewModel)
         }
         composable(ScreenRoutes.ObjectivesManagement.route) {
             val factory = ViewModelFactory(financeViewModel)
             val objectivesManagementViewModel: ObjectivesManagementViewModel = viewModel(factory = factory)
-            ObjectivesManagementScreen(navController, financeViewModel, objectivesManagementViewModel)
+            ObjectivesManagementScreen(navController, financeViewModel, objectivesManagementViewModel, authViewModel)
         }
         composable(ScreenRoutes.Settings.route) {
             val factory = ViewModelFactory(financeViewModel, themePreferenceManager)
@@ -153,12 +153,12 @@ fun NavGraph(
         composable(ScreenRoutes.Transactions.route) {
             val factory = ViewModelFactory(financeViewModel)
             val transactionsViewModel: TransactionsViewModel = viewModel(factory = factory)
-            TransactionsScreen(navController, financeViewModel, transactionsViewModel)
+            TransactionsScreen(navController, financeViewModel, transactionsViewModel, authViewModel)
         }
         composable(ScreenRoutes.CredDeb.route) {
             val factory = ViewModelFactory(financeViewModel)
             val creditsDebitsViewModel: CreditsDebitsViewModel = viewModel(factory = factory)
-            CreditsDebtsScreen(navController, financeViewModel, creditsDebitsViewModel)
+            CreditsDebtsScreen(navController, financeViewModel, creditsDebitsViewModel, authViewModel)
         }
         composable(
             route = ScreenRoutes.CredDebManagement.route,
@@ -183,6 +183,7 @@ fun NavGraph(
                 navController = navController,
                 viewModel = financeViewModel,
                 credDebManagementViewModel = credDebManagementViewModel,
+                authViewModel = authViewModel,
                 initialSelectedLoanType = initialLoanType
             )
         }

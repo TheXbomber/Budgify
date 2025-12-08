@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.navigation.BottomBar
 import com.example.budgify.navigation.TopBar
 import com.example.budgify.routes.ScreenRoutes
@@ -49,7 +50,8 @@ import kotlinx.coroutines.launch
 fun ObjectivesScreen(
     navController: NavController,
     viewModel: FinanceViewModel,
-    objectivesViewModel: ObjectivesViewModel
+    objectivesViewModel: ObjectivesViewModel,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Objectives.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -57,7 +59,7 @@ fun ObjectivesScreen(
     val uiState by objectivesViewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,

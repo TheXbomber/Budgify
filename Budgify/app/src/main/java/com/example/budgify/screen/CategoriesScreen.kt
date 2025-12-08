@@ -55,6 +55,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.CategoryType
 import com.example.budgify.navigation.BottomBar
@@ -74,7 +75,8 @@ enum class CategoriesTab(val title: String) {
 fun CategoriesScreen(
     navController: NavController,
     viewModel: FinanceViewModel,
-    categoriesViewModel: CategoriesViewModel
+    categoriesViewModel: CategoriesViewModel,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Categories.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -90,7 +92,7 @@ fun CategoriesScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,
