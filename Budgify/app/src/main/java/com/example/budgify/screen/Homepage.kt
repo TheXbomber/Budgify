@@ -120,6 +120,15 @@ fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepage
     val uiState by homepageViewModel.uiState.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
 
+    val oneTimeSnackbarMessage by viewModel.oneTimeSnackbarMessage.collectAsStateWithLifecycle()
+
+    LaunchedEffect(oneTimeSnackbarMessage) {
+        oneTimeSnackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.onSnackbarShown()
+        }
+    }
+
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)

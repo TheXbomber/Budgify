@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +56,8 @@ fun NavGraph(
             application.authService
         )
     )
+    val snackbarHostState = remember { SnackbarHostState() }
+
 
     val showAddTransactionDialog by financeViewModel.showAddTransactionDialog.collectAsStateWithLifecycle()
     val showAddObjectiveDialog by financeViewModel.showAddObjectiveDialog.collectAsStateWithLifecycle()
@@ -89,11 +92,14 @@ fun NavGraph(
             SplashScreen(navController = navController, authViewModel = authViewModel)
         }
         composable(ScreenRoutes.Pin.route) {
-            PinScreen(onPinVerified = {
-                navController.navigate(ScreenRoutes.Home.route) {
-                    popUpTo(ScreenRoutes.Pin.route) { inclusive = true }
-                }
-            })
+            PinScreen(
+                onPinVerified = {
+                    navController.navigate(ScreenRoutes.Home.route) {
+                        popUpTo(ScreenRoutes.Pin.route) { inclusive = true }
+                    }
+                },
+                financeViewModel = financeViewModel
+            )
         }
         composable("login") {
             LoginScreen(
@@ -142,7 +148,7 @@ fun NavGraph(
         composable(ScreenRoutes.Settings.route) {
             val factory = ViewModelFactory(financeViewModel, themePreferenceManager)
             val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
-            Settings(navController, financeViewModel, settingsViewModel, onThemeChange)
+            Settings(navController, financeViewModel, settingsViewModel, onThemeChange, authViewModel)
         }
         composable(ScreenRoutes.Transactions.route) {
             val factory = ViewModelFactory(financeViewModel)

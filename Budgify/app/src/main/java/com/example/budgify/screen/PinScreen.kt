@@ -10,13 +10,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.budgify.applicationlogic.FinanceViewModel
 import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
+import com.example.budgify.utils.removePinFromContext
 import com.example.budgify.utils.securityQuestions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PinScreen(onPinVerified: () -> Unit) {
+fun PinScreen(
+    onPinVerified: () -> Unit,
+    financeViewModel: FinanceViewModel
+) {
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -88,6 +93,9 @@ fun PinScreen(onPinVerified: () -> Unit) {
                 if (savedSecurityQA != null) {
                     Button(onClick = {
                         if (securityAnswer.equals(savedSecurityQA.answer, ignoreCase = true)) {
+                            if (removePinFromContext(context)) {
+                                financeViewModel.showSnackbar("Access via security question complete. PIN has been reset.")
+                            }
                             onPinVerified()
                         } else {
                             securityError = "Incorrect answer"

@@ -67,12 +67,11 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.budgify.R
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.navigation.BottomBar
 import com.example.budgify.navigation.TopBar
 import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.userpreferences.AppTheme
-import com.example.budgify.userpreferences.ThemePreferenceManager
-import com.example.budgify.userpreferences.rememberThemePreferenceManager
 import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
 import com.example.budgify.utils.saveSecurityQuestionAnswer
@@ -80,7 +79,7 @@ import com.example.budgify.utils.securityQuestions
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
-const val DEV = false
+const val DEV = true
 
 enum class SettingsOptionType {
     NONE, PIN, THEME, ABOUT, DEV_RESET
@@ -91,12 +90,14 @@ fun Settings(
     navController: NavController,
     viewModel: FinanceViewModel,
     settingsViewModel: SettingsViewModel,
-    onThemeChange: (AppTheme) -> Unit
+    onThemeChange: (AppTheme) -> Unit,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Settings.route) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val user by authViewModel.user.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
@@ -194,6 +195,30 @@ fun Settings(
                         AboutSettingsContent()
                     }
                     SettingsOptionType.DEV_RESET -> {}
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // User Info and Logout Button
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                user?.email?.let {
+                    Text("Logged in as: $it")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            authViewModel.logout()
+                            navController.navigate("login") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Logout")
+                    }
                 }
             }
         }

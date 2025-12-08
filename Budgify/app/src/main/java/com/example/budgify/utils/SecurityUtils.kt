@@ -43,6 +43,29 @@ fun getSavedPinFromContext(context: Context): String? {
     }
 }
 
+fun removePinFromContext(context: Context): Boolean {
+    return try {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        val sharedPreferences = EncryptedSharedPreferences.create(
+            context,
+            "AppSettings",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+        with(sharedPreferences.edit()) {
+            remove("access_pin")
+            apply()
+        }
+        true
+    } catch (e: Exception) {
+        Log.e("SecurityUtils", "Error removing PIN", e)
+        false
+    }
+}
+
 fun getSavedSecurityQuestionAnswer(context: Context): SecurityQuestionAnswer? {
     try {
         val masterKey = MasterKey.Builder(context)

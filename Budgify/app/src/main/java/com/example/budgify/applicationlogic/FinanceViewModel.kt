@@ -42,6 +42,17 @@ class FinanceViewModel(
     private val _userId = MutableStateFlow<String?>(null)
     val userId: StateFlow<String?> = _userId.asStateFlow()
 
+    private val _oneTimeSnackbarMessage = MutableStateFlow<String?>(null)
+    val oneTimeSnackbarMessage: StateFlow<String?> = _oneTimeSnackbarMessage.asStateFlow()
+
+    fun showSnackbar(message: String) {
+        _oneTimeSnackbarMessage.value = message
+    }
+
+    fun onSnackbarShown() {
+        _oneTimeSnackbarMessage.value = null
+    }
+
     init {
         viewModelScope.launch {
             _userId.value = authService.getCurrentUser()?.uid
