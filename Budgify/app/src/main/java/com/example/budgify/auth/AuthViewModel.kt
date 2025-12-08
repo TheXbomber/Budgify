@@ -47,6 +47,10 @@ class AuthViewModel(
 
     fun register(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
+            if (password.length < 6) {
+                onResult(false, "Password must be at least 6 characters long.")
+                return@launch
+            }
             val result = authService.register(email, password)
             if (result.isSuccess) {
                 val registeredUser = result.getOrNull()
@@ -86,6 +90,13 @@ class AuthViewModel(
             authService.logout()
             _user.value = null
         }
+    }
+
+    suspend fun changePassword(currentPassword: String, newPassword: String): Boolean {
+        if (newPassword.length < 6) {
+            return false
+        }
+        return authService.changePassword(currentPassword, newPassword).isSuccess
     }
 }
 

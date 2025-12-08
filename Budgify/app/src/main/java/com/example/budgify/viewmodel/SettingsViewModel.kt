@@ -1,6 +1,5 @@
 package com.example.budgify.viewmodel
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.budgify.applicationlogic.FinanceViewModel
@@ -28,7 +27,14 @@ data class SettingsUiState(
     val confirmPinVisible: Boolean = false,
     // Theme settings
     val currentTheme: AppTheme = AppTheme.LIGHT,
-    val unlockedThemeNames: Set<String> = emptySet()
+    val unlockedThemeNames: Set<String> = emptySet(),
+    // Password settings
+    val currentPassword: String = "",
+    val newPassword: String = "",
+    val confirmNewPassword: String = "",
+    val currentPasswordVisible: Boolean = false,
+    val newPasswordVisible: Boolean = false,
+    val confirmNewPasswordVisible: Boolean = false
 )
 
 class SettingsViewModel(
@@ -100,12 +106,29 @@ class SettingsViewModel(
         _uiState.update { it.copy(snackbarMessage = null) }
     }
 
-    fun loadInitialPinState(context: Context) {
-        // This is a simplified approach. In a real app, you might use a repository
-        // to abstract away the SharedPreferences logic.
-        // For this refactoring, we'll keep it here.
-        // The getSavedPinFromContext is a helper function in another file,
-        // so we can't directly call it here. We'll have to replicate its logic or move it.
-        // For now, let's assume the screen will pass the initial state.
+    // Password change functions
+    fun onCurrentPasswordChange(password: String) {
+        _uiState.update { it.copy(currentPassword = password) }
     }
+
+    fun onNewPasswordChange(password: String) {
+        _uiState.update { it.copy(newPassword = password) }
+    }
+
+    fun onConfirmNewPasswordChange(password: String) {
+        _uiState.update { it.copy(confirmNewPassword = password) }
+    }
+
+    fun onCurrentPasswordVisibilityToggle() {
+        _uiState.update { it.copy(currentPasswordVisible = !it.currentPasswordVisible) }
+    }
+
+    fun onNewPasswordVisibilityToggle() {
+        _uiState.update { it.copy(newPasswordVisible = !it.newPasswordVisible) }
+    }
+
+    fun onConfirmNewPasswordVisibilityToggle() {
+        _uiState.update { it.copy(confirmNewPasswordVisible = !it.confirmNewPasswordVisible) }
+    }
+
 }
