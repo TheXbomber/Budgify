@@ -1,3 +1,3 @@
 TODO:
-[ ] Adjust logout button
-[ ] Refactor homepage
+- [ ] Adjust logout button
+- [ ] Refactor homepage
