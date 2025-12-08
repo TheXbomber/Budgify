@@ -7,52 +7,42 @@ import com.example.budgify.dataaccessobjects.CategoryDao
 import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.DefaultCategories
-import com.example.budgify.entities.User
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 class AuthViewModel(
-    private val userDao: UserDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val authService: AuthService
 ) : ViewModel() {
 
-    // This will now safely get the correctly configured default instance.
-    private val auth: FirebaseAuth = Firebase.auth
-
-    private val _user = MutableStateFlow(auth.currentUser)
-    val user: StateFlow<com.google.firebase.auth.FirebaseUser?> = _user
+    private val _user = MutableStateFlow(authService.getCurrentUser())
+    val user: StateFlow<com.example.budgify.auth.User?> = _user
 
     fun login(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            try {
-                auth.signInWithEmailAndPassword(email, password).await()
-                _user.value = auth.currentUser
+            val result = authService.login(email, password)
+            if (result.isSuccess) {
+                _user.value = result.getOrNull()
                 onResult(true, null)
-            } catch (e: Exception) {
-                onResult(false, e.message)
+            } else {
+                onResult(false, result.exceptionOrNull()?.message)
             }
         }
     }
 
     fun register(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
-            try {
-                val authResult = auth.createUserWithEmailAndPassword(email, password).await()
-                _user.value = auth.currentUser
-                val firebaseUser = authResult.user
-                if (firebaseUser != null) {
-                    val newUser = User(id = firebaseUser.uid, email = firebaseUser.email)
-                    userDao.insert(newUser)
-                    createDefaultCategories(firebaseUser.uid)
+            val result = authService.register(email, password)
+            if (result.isSuccess) {
+                val registeredUser = result.getOrNull()
+                _user.value = registeredUser
+                if (registeredUser != null) {
+                    createDefaultCategories(registeredUser.uid)
                 }
                 onResult(true, null)
-            } catch (e: Exception) {
-                onResult(false, e.message)
+            } else {
+                onResult(false, result.exceptionOrNull()?.message)
             }
         }
     }
@@ -78,19 +68,19 @@ class AuthViewModel(
     }
 
     fun logout() {
-        auth.signOut()
+        authService.logout()
         _user.value = null
     }
 }
 
 class AuthViewModelFactory(
-    private val userDao: UserDao,
-    private val categoryDao: CategoryDao
+    private val categoryDao: CategoryDao,
+    private val authService: AuthService
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AuthViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AuthViewModel(userDao, categoryDao) as T
+            return AuthViewModel(categoryDao, authService) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

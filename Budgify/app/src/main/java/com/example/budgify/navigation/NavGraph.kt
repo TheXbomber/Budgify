@@ -49,45 +49,50 @@ import com.example.budgify.viewmodel.TransactionsViewModel
 
 @Composable
 fun NavGraph(
-    viewModel: FinanceViewModel,
     themePreferenceManager: ThemePreferenceManager,
     onThemeChange: (AppTheme) -> Unit,
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as FinanceApplication
+    val financeViewModel: FinanceViewModel = viewModel(
+        factory = FinanceViewModel.FinanceViewModelFactory(
+            application.repository,
+            application.authService
+        )
+    )
     val authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModelFactory(
-            application.database.userDao(),
-            application.database.categoryDao()
+            application.database.categoryDao(),
+            application.authService
         )
     )
 
-    val showAddTransactionDialog by viewModel.showAddTransactionDialog.collectAsStateWithLifecycle()
-    val showAddObjectiveDialog by viewModel.showAddObjectiveDialog.collectAsStateWithLifecycle()
-    val showAddLoanDialog by viewModel.showAddLoanDialog.collectAsStateWithLifecycle()
+    val showAddTransactionDialog by financeViewModel.showAddTransactionDialog.collectAsStateWithLifecycle()
+    val showAddObjectiveDialog by financeViewModel.showAddObjectiveDialog.collectAsStateWithLifecycle()
+    val showAddLoanDialog by financeViewModel.showAddLoanDialog.collectAsStateWithLifecycle()
 
     if (showAddTransactionDialog) {
         AddTransactionDialog(
-            viewModel = viewModel,
-            onDismiss = { viewModel.onDismissAddTransactionDialog() },
-            onTransactionAdded = { viewModel.onDismissAddTransactionDialog() }
+            viewModel = financeViewModel,
+            onDismiss = { financeViewModel.onDismissAddTransactionDialog() },
+            onTransactionAdded = { financeViewModel.onDismissAddTransactionDialog() }
         )
     }
 
     if (showAddObjectiveDialog) {
         AddObjectiveDialog(
-            viewModel = viewModel,
-            onDismiss = { viewModel.onDismissAddObjectiveDialog() },
-            onObjectiveAdded = { viewModel.onDismissAddObjectiveDialog() }
+            viewModel = financeViewModel,
+            onDismiss = { financeViewModel.onDismissAddObjectiveDialog() },
+            onObjectiveAdded = { financeViewModel.onDismissAddObjectiveDialog() }
         )
     }
 
     if (showAddLoanDialog) {
         AddLoanDialog(
-            viewModel = viewModel,
-            onDismiss = { viewModel.onDismissAddLoanDialog() },
-            onLoanAdded = { viewModel.onDismissAddLoanDialog() }
+            viewModel = financeViewModel,
+            onDismiss = { financeViewModel.onDismissAddLoanDialog() },
+            onLoanAdded = { financeViewModel.onDismissAddLoanDialog() }
         )
     }
 
@@ -100,7 +105,7 @@ fun NavGraph(
                 navController = navController,
                 authViewModel = authViewModel,
                 onLoginSuccess = {
-                    viewModel.onUserLoggedIn()
+                    financeViewModel.onUserLoggedIn()
                     navController.navigate(ScreenRoutes.Home.route) {
                         popUpTo("login") { inclusive = true }
                     }
@@ -112,7 +117,7 @@ fun NavGraph(
                 navController = navController,
                 authViewModel = authViewModel,
                 onRegistrationSuccess = {
-                    viewModel.onUserLoggedIn()
+                    financeViewModel.onUserLoggedIn()
                     navController.navigate(ScreenRoutes.Home.route) {
                         popUpTo("registration") { inclusive = true }
                     }
@@ -120,39 +125,39 @@ fun NavGraph(
             )
         }
         composable(ScreenRoutes.Categories.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val categoriesViewModel: CategoriesViewModel = viewModel(factory = factory)
-            CategoriesScreen(navController, viewModel, categoriesViewModel)
+            CategoriesScreen(navController, financeViewModel, categoriesViewModel)
         }
         composable(ScreenRoutes.Home.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val homepageViewModel: HomepageViewModel = viewModel(factory = factory)
-            Homepage(navController, viewModel, homepageViewModel)
+            Homepage(navController, financeViewModel, homepageViewModel)
         }
         composable(ScreenRoutes.Objectives.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val objectivesViewModel: ObjectivesViewModel = viewModel(factory = factory)
-            ObjectivesScreen(navController, viewModel, objectivesViewModel)
+            ObjectivesScreen(navController, financeViewModel, objectivesViewModel)
         }
         composable(ScreenRoutes.ObjectivesManagement.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val objectivesManagementViewModel: ObjectivesManagementViewModel = viewModel(factory = factory)
-            ObjectivesManagementScreen(navController, viewModel, objectivesManagementViewModel)
+            ObjectivesManagementScreen(navController, financeViewModel, objectivesManagementViewModel)
         }
         composable(ScreenRoutes.Settings.route) {
-            val factory = ViewModelFactory(viewModel, themePreferenceManager)
+            val factory = ViewModelFactory(financeViewModel, themePreferenceManager)
             val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
-            Settings(navController, viewModel, settingsViewModel, onThemeChange)
+            Settings(navController, financeViewModel, settingsViewModel, onThemeChange)
         }
         composable(ScreenRoutes.Transactions.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val transactionsViewModel: TransactionsViewModel = viewModel(factory = factory)
-            TransactionsScreen(navController, viewModel, transactionsViewModel)
+            TransactionsScreen(navController, financeViewModel, transactionsViewModel)
         }
         composable(ScreenRoutes.CredDeb.route) {
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val creditsDebitsViewModel: CreditsDebitsViewModel = viewModel(factory = factory)
-            CreditsDebtsScreen(navController, viewModel, creditsDebitsViewModel)
+            CreditsDebtsScreen(navController, financeViewModel, creditsDebitsViewModel)
         }
         composable(
             route = ScreenRoutes.CredDebManagement.route,
@@ -171,11 +176,11 @@ fun NavGraph(
                 Log.e("NavGraph", "Invalid LoanType argument: $initialLoanTypeName", e)
                 null
             }
-            val factory = ViewModelFactory(viewModel)
+            val factory = ViewModelFactory(financeViewModel)
             val credDebManagementViewModel: CredDebManagementViewModel = viewModel(factory = factory)
             CredDebManagementScreen(
                 navController = navController,
-                viewModel = viewModel,
+                viewModel = financeViewModel,
                 credDebManagementViewModel = credDebManagementViewModel,
                 initialSelectedLoanType = initialLoanType
             )

@@ -1,13 +1,11 @@
 package com.example.budgify.database
 
 import android.content.Context
-import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.budgify.dataaccessobjects.AccountDao
 import com.example.budgify.dataaccessobjects.CategoryDao
 import com.example.budgify.dataaccessobjects.LoanDao
@@ -24,8 +22,6 @@ import com.example.budgify.entities.ObjectiveType
 import com.example.budgify.entities.TransactionType
 import com.example.budgify.entities.User
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 class Converters {
@@ -88,7 +84,7 @@ class Converters {
     version = 10,
     exportSchema = false
 )
-@TypeConverters(Converters::class) // Se hai bisogno di TypeConverters
+@TypeConverters(Converters::class)
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun accountDao(): AccountDao
@@ -106,7 +102,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     FinanceDatabase::class.java,
-                    "finance_database" // Il nome del tuo file database
+                    "finance_database"
                 )
                     .fallbackToDestructiveMigration()
                     .build()

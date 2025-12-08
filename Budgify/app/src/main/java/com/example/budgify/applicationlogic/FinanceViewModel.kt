@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.budgify.auth.AuthService
 import com.example.budgify.entities.Account
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.DefaultCategories
@@ -14,8 +15,6 @@ import com.example.budgify.entities.Objective
 import com.example.budgify.entities.ObjectiveType
 import com.example.budgify.entities.TransactionType
 import com.example.budgify.userpreferences.AppTheme
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
@@ -35,14 +34,16 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() {
+class FinanceViewModel(
+    private val repository: FinanceRepository,
+    private val authService: AuthService
+) : ViewModel() {
 
-    private val auth = Firebase.auth
-    private val _userId = MutableStateFlow<String?>(auth.currentUser?.uid)
+    private val _userId = MutableStateFlow<String?>(authService.getCurrentUser()?.uid)
     val userId: StateFlow<String?> = _userId.asStateFlow()
 
     fun onUserLoggedIn() {
-        _userId.value = auth.currentUser?.uid
+        _userId.value = authService.getCurrentUser()?.uid
     }
 
     private val _snackbarMessages = MutableSharedFlow<String>()
@@ -762,11 +763,14 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
         }
     }
 
-    class FinanceViewModelFactory(private val repository: FinanceRepository) : ViewModelProvider.Factory {
+    class FinanceViewModelFactory(
+        private val repository: FinanceRepository,
+        private val authService: AuthService
+    ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(FinanceViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return FinanceViewModel(repository) as T
+                return FinanceViewModel(repository, authService) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

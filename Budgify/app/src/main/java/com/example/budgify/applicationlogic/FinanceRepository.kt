@@ -6,6 +6,7 @@ import com.example.budgify.dataaccessobjects.CategoryDao
 import com.example.budgify.dataaccessobjects.LoanDao
 import com.example.budgify.dataaccessobjects.ObjectiveDao
 import com.example.budgify.dataaccessobjects.TransactionDao
+import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.entities.Account
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.Loan
@@ -13,6 +14,7 @@ import com.example.budgify.entities.MyTransaction
 import com.example.budgify.entities.Objective
 import com.example.budgify.entities.TransactionType
 import com.example.budgify.entities.TransactionWithDetails
+import com.example.budgify.entities.User
 import kotlinx.coroutines.flow.Flow
 
 class FinanceRepository(
@@ -21,8 +23,14 @@ class FinanceRepository(
     private val objectiveDao: ObjectiveDao,
     private val categoryDao: CategoryDao,
     private val loanDao: LoanDao,
+    private val userDao: UserDao,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
+
+    // USER
+    suspend fun insertUser(user: User) {
+        userDao.insert(user)
+    }
 
     // TRANSACTIONS
 //    fun getAllTransactions(userId: String): Flow<List<MyTransaction>> {
