@@ -1,6 +1,7 @@
 package com.example.budgify.auth
 
 import com.example.budgify.dataaccessobjects.UserDao
+import com.example.budgify.utils.hashPassword
 import java.util.UUID
 
 class DatabaseAuthService(private val userDao: UserDao) : AuthService {
@@ -9,7 +10,8 @@ class DatabaseAuthService(private val userDao: UserDao) : AuthService {
 
     override suspend fun login(email: String, password: String): Result<User> {
         val user = userDao.getUserByEmail(email)
-        return if (user != null && user.password == password) {
+        val hashedPassword = hashPassword(password)
+        return if (user != null && user.password == hashedPassword) {
             val authUser = User(user.id, user.email)
             currentUser = authUser
             Result.success(authUser)
@@ -22,10 +24,11 @@ class DatabaseAuthService(private val userDao: UserDao) : AuthService {
         if (userDao.getUserByEmail(email) != null) {
             return Result.failure(Exception("User already exists"))
         }
+        val hashedPassword = hashPassword(password)
         val newUser = com.example.budgify.entities.User(
             id = UUID.randomUUID().toString(),
             email = email,
-            password = password
+            password = hashedPassword
         )
         userDao.insert(newUser)
         val authUser = User(newUser.id, newUser.email)

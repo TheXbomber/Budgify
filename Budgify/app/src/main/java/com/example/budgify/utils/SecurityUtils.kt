@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.security.MessageDigest
 
 data class SecurityQuestionAnswer(val questionIndex: Int, val answer: String)
 
@@ -14,6 +15,13 @@ val securityQuestions = listOf(
     "In what city were you born?",
     "What is your favorite book?"
 )
+
+fun hashPassword(password: String): String {
+    val bytes = password.toByteArray()
+    val md = MessageDigest.getInstance("SHA-256")
+    val digest = md.digest(bytes)
+    return digest.fold("") { str, it -> str + "%02x".format(it) }
+}
 
 fun getSavedPinFromContext(context: Context): String? {
     return try {
