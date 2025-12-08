@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.budgify.dataaccessobjects.CategoryDao
-import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.DefaultCategories
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class AuthViewModel(
@@ -16,8 +16,22 @@ class AuthViewModel(
     private val authService: AuthService
 ) : ViewModel() {
 
-    private val _user = MutableStateFlow(authService.getCurrentUser())
-    val user: StateFlow<com.example.budgify.auth.User?> = _user
+    private val _user = MutableStateFlow<User?>(null)
+    val user: StateFlow<User?> = _user.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    init {
+        checkSession()
+    }
+
+    private fun checkSession() {
+        viewModelScope.launch {
+            _user.value = authService.getCurrentUser()
+            _isLoading.value = false
+        }
+    }
 
     fun login(email: String, password: String, onResult: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
@@ -68,8 +82,10 @@ class AuthViewModel(
     }
 
     fun logout() {
-        authService.logout()
-        _user.value = null
+        viewModelScope.launch {
+            authService.logout()
+            _user.value = null
+        }
     }
 }
 

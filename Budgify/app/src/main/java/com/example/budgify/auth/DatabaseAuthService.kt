@@ -1,19 +1,24 @@
 package com.example.budgify.auth
 
+import android.content.Context
 import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.utils.hashPassword
 import java.util.UUID
 
-class DatabaseAuthService(private val userDao: UserDao) : AuthService {
+class DatabaseAuthService(
+    private val userDao: UserDao,
+    private val context: Context
+) : AuthService {
 
-    private var currentUser: User? = null
+    private val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+    private val USER_EMAIL_KEY = "logged_in_user_email"
 
     override suspend fun login(email: String, password: String): Result<User> {
         val user = userDao.getUserByEmail(email)
         val hashedPassword = hashPassword(password)
         return if (user != null && user.password == hashedPassword) {
+            prefs.edit().putString(USER_EMAIL_KEY, user.email).apply()
             val authUser = User(user.id, user.email)
-            currentUser = authUser
             Result.success(authUser)
         } else {
             Result.failure(Exception("Invalid credentials"))
@@ -31,16 +36,18 @@ class DatabaseAuthService(private val userDao: UserDao) : AuthService {
             password = hashedPassword
         )
         userDao.insert(newUser)
+        prefs.edit().putString(USER_EMAIL_KEY, newUser.email).apply()
         val authUser = User(newUser.id, newUser.email)
-        currentUser = authUser
         return Result.success(authUser)
     }
 
-    override fun logout() {
-        currentUser = null
+    override suspend fun logout() {
+        prefs.edit().remove(USER_EMAIL_KEY).apply()
     }
 
-    override fun getCurrentUser(): User? {
-        return currentUser
+    override suspend fun getCurrentUser(): User? {
+        val userEmail = prefs.getString(USER_EMAIL_KEY, null) ?: return null
+        val user = userDao.getUserByEmail(userEmail)
+        return user?.let { User(it.id, it.email) }
     }
 }

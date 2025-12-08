@@ -7,6 +7,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,24 +29,11 @@ import com.example.budgify.entities.LoanType
 import com.example.budgify.factory.ViewModelFactory
 import com.example.budgify.routes.ARG_INITIAL_LOAN_TYPE
 import com.example.budgify.routes.ScreenRoutes
-import com.example.budgify.screen.CategoriesScreen
-import com.example.budgify.screen.CredDebManagementScreen
-import com.example.budgify.screen.CreditsDebtsScreen
-import com.example.budgify.screen.Homepage
-import com.example.budgify.screen.ObjectivesManagementScreen
-import com.example.budgify.screen.ObjectivesScreen
-import com.example.budgify.screen.Settings
-import com.example.budgify.screen.TransactionsScreen
+import com.example.budgify.screen.*
 import com.example.budgify.userpreferences.AppTheme
 import com.example.budgify.userpreferences.ThemePreferenceManager
-import com.example.budgify.viewmodel.CategoriesViewModel
-import com.example.budgify.viewmodel.CredDebManagementViewModel
-import com.example.budgify.viewmodel.CreditsDebitsViewModel
-import com.example.budgify.viewmodel.HomepageViewModel
-import com.example.budgify.viewmodel.ObjectivesManagementViewModel
-import com.example.budgify.viewmodel.ObjectivesViewModel
-import com.example.budgify.viewmodel.SettingsViewModel
-import com.example.budgify.viewmodel.TransactionsViewModel
+import com.example.budgify.utils.getSavedPinFromContext
+import com.example.budgify.viewmodel.*
 
 @Composable
 fun NavGraph(
@@ -99,6 +87,13 @@ fun NavGraph(
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
             SplashScreen(navController = navController, authViewModel = authViewModel)
+        }
+        composable(ScreenRoutes.Pin.route) {
+            PinScreen(onPinVerified = {
+                navController.navigate(ScreenRoutes.Home.route) {
+                    popUpTo(ScreenRoutes.Pin.route) { inclusive = true }
+                }
+            })
         }
         composable("login") {
             LoginScreen(
@@ -191,23 +186,27 @@ fun NavGraph(
 @Composable
 fun SplashScreen(navController: NavHostController, authViewModel: AuthViewModel) {
     val user by authViewModel.user.collectAsStateWithLifecycle()
+    val isLoading by authViewModel.isLoading.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val savedPin = remember { getSavedPinFromContext(context) }
 
-    LaunchedEffect(user) {
-        if (user != null) {
-            navController.navigate(ScreenRoutes.Home.route) {
-                popUpTo("splash") { inclusive = true }
+    if (isLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LaunchedEffect(user) {
+            val destination = if (user != null) {
+                if (savedPin != null) ScreenRoutes.Pin.route else ScreenRoutes.Home.route
+            } else {
+                "login"
             }
-        } else {
-            navController.navigate("login") {
+            navController.navigate(destination) {
                 popUpTo("splash") { inclusive = true }
             }
         }
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        CircularProgressIndicator()
     }
 }

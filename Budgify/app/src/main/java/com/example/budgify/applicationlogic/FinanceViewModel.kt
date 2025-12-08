@@ -39,11 +39,19 @@ class FinanceViewModel(
     private val authService: AuthService
 ) : ViewModel() {
 
-    private val _userId = MutableStateFlow<String?>(authService.getCurrentUser()?.uid)
+    private val _userId = MutableStateFlow<String?>(null)
     val userId: StateFlow<String?> = _userId.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            _userId.value = authService.getCurrentUser()?.uid
+        }
+    }
+
     fun onUserLoggedIn() {
-        _userId.value = authService.getCurrentUser()?.uid
+        viewModelScope.launch {
+            _userId.value = authService.getCurrentUser()?.uid
+        }
     }
 
     private val _snackbarMessages = MutableSharedFlow<String>()

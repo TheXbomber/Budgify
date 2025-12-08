@@ -37,6 +37,6 @@ class FinanceApplication : Application() {
     }
 
     val authService: AuthService by lazy {
-        DatabaseAuthService(database.userDao())
+        DatabaseAuthService(database.userDao(), this)
     }
 }

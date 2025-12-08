@@ -497,6 +497,8 @@ fun PinSettingsContent(
                                 }
                                 changesMade = true
                                 isPinSet = true
+                                onNewPinChange("")
+                                onConfirmPinChange("")
                             } catch (e: Exception) {
                                 Log.e("PinSettingsContent", "Error saving PIN", e)
                                 errorMessage = "Error saving PIN."
