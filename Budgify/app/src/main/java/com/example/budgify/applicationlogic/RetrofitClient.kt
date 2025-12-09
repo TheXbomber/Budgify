@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private const val BASE_URL = "YOUR_PYTHONANYWHERE_SERVER_URL/" // IMPORTANT: Replace with your actual base URL
+    private const val BASE_URL = "https://thexbomber.eu.pythonanywhere.com/scan_receipt"
 
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())

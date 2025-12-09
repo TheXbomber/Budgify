@@ -1,5 +1,12 @@
 package com.example.budgify.navigation
 
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,19 +21,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -56,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color.Companion.Transparent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -64,12 +76,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.budgify.R // Assuming R.xml.file_paths exists for FileProvider
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.applicationlogic.ReceiptScanRepository
 import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.CategoryType
@@ -84,11 +99,16 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.screen.AddCategoryDialog
 import com.example.budgify.screen.items
 import com.example.budgify.screen.smallTextStyle
+import com.example.budgify.utils.processImageForReceipt
+import com.example.budgify.utils.parseTransactionDate
+import com.example.budgify.utils.mapCategoryToTransactionType
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -313,6 +333,9 @@ fun AddTransactionDialog(
     onDismiss: () -> Unit,
     onTransactionAdded: (MyTransaction) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val categoriesForDropdown by viewModel.categoriesForTransactionDialog.collectAsStateWithLifecycle(
@@ -334,6 +357,75 @@ fun AddTransactionDialog(
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var descriptionError by remember { mutableStateOf<String?>(null) }
     val userId by viewModel.userId.collectAsStateWithLifecycle()
+
+    // Receipt Scanning States
+    var isLoadingReceiptScan by remember { mutableStateOf(false) }
+    var showScanErrorDialog by remember { mutableStateOf(false) }
+    var scanErrorMessage by remember { mutableStateOf("") }
+    var tempImageUri by remember { mutableStateOf<Uri?>(null) } // For camera capture
+
+    val receiptScanRepository = remember { ReceiptScanRepository() }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success && tempImageUri != null) {
+            scope.launch {
+                processImageForReceipt(
+                    imageUri = tempImageUri!!,
+                    context = context,
+                    viewModel = viewModel,
+                    receiptScanRepository = receiptScanRepository,
+                    onLoading = { isLoadingReceiptScan = it },
+                    onSuccess = { parsedTransaction ->
+                        description = parsedTransaction.description
+                        amount = parsedTransaction.amount.toString()
+                        selectedDate = parseTransactionDate(parsedTransaction.date)
+                        // Attempt to find and set category based on parsedTransaction.category
+                        val matchedCategory = categoriesForDropdown.firstOrNull { it.desc.equals(parsedTransaction.category, ignoreCase = true) }
+                        selectedCategory = matchedCategory
+                        selectedCategoryId = matchedCategory?.id
+                        if (selectedCategory != null) {
+                            selectedType = mapCategoryToTransactionType(selectedCategory!!.type)
+                        }
+                    },
+                    onError = { message ->
+                        scanErrorMessage = message
+                        showScanErrorDialog = true
+                    }
+                )
+            }
+        }
+        tempImageUri = null // Clear temp URI after processing
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                processImageForReceipt(
+                    imageUri = uri,
+                    context = context,
+                    viewModel = viewModel,
+                    receiptScanRepository = receiptScanRepository,
+                    onLoading = { isLoadingReceiptScan = it },
+                    onSuccess = { parsedTransaction ->
+                        description = parsedTransaction.description
+                        amount = parsedTransaction.amount.toString()
+                        selectedDate = parseTransactionDate(parsedTransaction.date)
+                        val matchedCategory = categoriesForDropdown.firstOrNull { it.desc.equals(parsedTransaction.category, ignoreCase = true) }
+                        selectedCategory = matchedCategory
+                        selectedCategoryId = matchedCategory?.id
+                        if (selectedCategory != null) {
+                            selectedType = mapCategoryToTransactionType(selectedCategory!!.type)
+                        }
+                    },
+                    onError = { message ->
+                        scanErrorMessage = message
+                        showScanErrorDialog = true
+                    }
+                )
+            }
+        }
+    }
+
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -359,7 +451,32 @@ fun AddTransactionDialog(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 8.dp)
             )
-
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    val photoFile = File(context.cacheDir, "receipt_image.jpg")
+                    tempImageUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        photoFile
+                    )
+                    cameraLauncher.launch(tempImageUri!!)
+                }) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = "Scan with Camera", modifier = Modifier.size(36.dp))
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                IconButton(onClick = { galleryLauncher.launch("image/*") }) {
+                    Icon(Icons.Filled.Image, contentDescription = "Select from Gallery", modifier = Modifier.size(36.dp))
+                }
+            }
+            if (isLoadingReceiptScan) {
+                CircularProgressIndicator(modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentWidth(Alignment.CenterHorizontally))
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             TextField(
@@ -567,7 +684,6 @@ fun AddTransactionDialog(
         }
     }
 
-
     if (showDatePickerDialog) {
         val initialDateMillis = LocalDate.now().atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
@@ -621,7 +737,20 @@ fun AddTransactionDialog(
             }
         )
     }
-}
+
+    if (showScanErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showScanErrorDialog = false },
+            title = { Text("Receipt Scan Error") },
+            text = { Text(scanErrorMessage) },
+            confirmButton = {
+                TextButton(onClick = { showScanErrorDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+} 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
