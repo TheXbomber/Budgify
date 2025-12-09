@@ -63,6 +63,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.TransactionType
 import com.example.budgify.entities.TransactionWithDetails
 import com.example.budgify.navigation.BottomBar
@@ -81,7 +82,8 @@ import java.time.format.DateTimeFormatter
 fun TransactionsScreen(
     navController: NavController,
     viewModel: FinanceViewModel,
-    transactionsViewModel: TransactionsViewModel
+    transactionsViewModel: TransactionsViewModel,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Transactions.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -97,7 +99,7 @@ fun TransactionsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,

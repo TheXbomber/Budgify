@@ -67,12 +67,11 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.budgify.R
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.navigation.BottomBar
 import com.example.budgify.navigation.TopBar
 import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.userpreferences.AppTheme
-import com.example.budgify.userpreferences.ThemePreferenceManager
-import com.example.budgify.userpreferences.rememberThemePreferenceManager
 import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
 import com.example.budgify.utils.saveSecurityQuestionAnswer
@@ -80,10 +79,10 @@ import com.example.budgify.utils.securityQuestions
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
-const val DEV = false
+const val DEV = true
 
 enum class SettingsOptionType {
-    NONE, PIN, THEME, ABOUT, DEV_RESET
+    NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD
 }
 
 @Composable
@@ -91,12 +90,14 @@ fun Settings(
     navController: NavController,
     viewModel: FinanceViewModel,
     settingsViewModel: SettingsViewModel,
-    onThemeChange: (AppTheme) -> Unit
+    onThemeChange: (AppTheme) -> Unit,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Settings.route) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val user by authViewModel.user.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
@@ -107,7 +108,7 @@ fun Settings(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,
@@ -133,6 +134,12 @@ fun Settings(
                     icon = Icons.Default.Lock,
                     title = "Access PIN & Security Question",
                     onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PIN) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsOption(
+                    icon = Icons.Default.Lock, // Reusing Lock icon for password
+                    title = "Change Password",
+                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PASSWORD) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingsOption(
@@ -194,8 +201,24 @@ fun Settings(
                         AboutSettingsContent()
                     }
                     SettingsOptionType.DEV_RESET -> {}
+                    SettingsOptionType.PASSWORD -> {
+                        ChangePasswordContent(
+                            uiState = uiState,
+                            authViewModel = authViewModel,
+                            onCurrentPasswordChange = { settingsViewModel.onCurrentPasswordChange(it) },
+                            onNewPasswordChange = { settingsViewModel.onNewPasswordChange(it) },
+                            onConfirmNewPasswordChange = { settingsViewModel.onConfirmNewPasswordChange(it) },
+                            onCurrentPasswordVisibilityToggle = { settingsViewModel.onCurrentPasswordVisibilityToggle() },
+                            onNewPasswordVisibilityToggle = { settingsViewModel.onNewPasswordVisibilityToggle() },
+                            onConfirmNewPasswordVisibilityToggle = { settingsViewModel.onConfirmNewPasswordVisibilityToggle() },
+                            snackbarHostState = snackbarHostState
+                        )
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
         }
         if (uiState.showResetConfirmationDialog) {
             ResetConfirmationDialog(
@@ -264,8 +287,6 @@ fun PinSettingsContent(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
-
     var isPinSet by remember { mutableStateOf(getSavedPinFromContext(context) != null) }
     var savedSecurityQA by remember { mutableStateOf(getSavedSecurityQuestionAnswer(context)) }
 
@@ -300,7 +321,7 @@ fun PinSettingsContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
-            .verticalScroll(scrollState)
+            .verticalScroll(rememberScrollState())
     ) {
         Text(
             when {
@@ -497,6 +518,8 @@ fun PinSettingsContent(
                                 }
                                 changesMade = true
                                 isPinSet = true
+                                onNewPinChange("")
+                                onConfirmPinChange("")
                             } catch (e: Exception) {
                                 Log.e("PinSettingsContent", "Error saving PIN", e)
                                 errorMessage = "Error saving PIN."
@@ -664,8 +687,141 @@ fun AboutSettingsContent() {
             style = MaterialTheme.typography.bodyMedium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-        Text("Version: 1.0.0", style = MaterialTheme.typography.bodyLarge)
+        Text("Version: 1.1.0", style = MaterialTheme.typography.bodyLarge)
         Text("Developers:", style = MaterialTheme.typography.bodyLarge)
         Text("A. Catalano, A. Rocchi, O. Iacobelli", style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChangePasswordContent(
+    uiState: com.example.budgify.viewmodel.SettingsUiState,
+    authViewModel: AuthViewModel,
+    onCurrentPasswordChange: (String) -> Unit,
+    onNewPasswordChange: (String) -> Unit,
+    onConfirmNewPasswordChange: (String) -> Unit,
+    onCurrentPasswordVisibilityToggle: () -> Unit,
+    onNewPasswordVisibilityToggle: () -> Unit,
+    onConfirmNewPasswordVisibilityToggle: () -> Unit,
+    snackbarHostState: SnackbarHostState
+) {
+    val scope = rememberCoroutineScope()
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            "Change Password",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        TextField(
+            value = uiState.currentPassword,
+            onValueChange = onCurrentPasswordChange,
+            label = { Text("Current Password") },
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Current Password") },
+            trailingIcon = {
+                val image = if (uiState.currentPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                val description = if (uiState.currentPasswordVisible) "Hide password" else "Show password"
+                IconButton(onClick = onCurrentPasswordVisibilityToggle) {
+                    Icon(imageVector = image, description)
+                }
+            },
+            visualTransformation = if (uiState.currentPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = errorMessage?.contains("current password", ignoreCase = true) == true
+        )
+
+        TextField(
+            value = uiState.newPassword,
+            onValueChange = onNewPasswordChange,
+            label = { Text("New Password (min 6 characters)") },
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "New Password") },
+            trailingIcon = {
+                val image = if (uiState.newPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                val description = if (uiState.newPasswordVisible) "Hide password" else "Show password"
+                IconButton(onClick = onNewPasswordVisibilityToggle) {
+                    Icon(imageVector = image, description)
+                }
+            },
+            visualTransformation = if (uiState.newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = errorMessage?.contains("new password", ignoreCase = true) == true
+        )
+
+        TextField(
+            value = uiState.confirmNewPassword,
+            onValueChange = onConfirmNewPasswordChange,
+            label = { Text("Confirm New Password") },
+            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Confirm New Password") },
+            trailingIcon = {
+                val image = if (uiState.confirmNewPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                val description = if (uiState.confirmNewPasswordVisible) "Hide password" else "Show password"
+                IconButton(onClick = onConfirmNewPasswordVisibilityToggle) {
+                    Icon(imageVector = image, description)
+                }
+            },
+            visualTransformation = if (uiState.confirmNewPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            isError = errorMessage?.contains("passwords do not match", ignoreCase = true) == true
+        )
+
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+
+        Button(
+            onClick = {
+                errorMessage = null
+                if (uiState.newPassword.length < 6) {
+                    errorMessage = "New password must be at least 6 characters long."
+                    return@Button
+                }
+                if (uiState.newPassword != uiState.confirmNewPassword) {
+                    errorMessage = "New passwords do not match."
+                    return@Button
+                }
+
+                // Here you would call authViewModel to change the password
+                // e.g., authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
+                // The AuthViewModel should handle the actual logic and update snackbarHostState on success/failure.
+                scope.launch {
+                    val success = authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
+                    if (success) {
+                        snackbarHostState.showSnackbar("Password changed successfully!")
+                        // Clear password fields on success
+                        onCurrentPasswordChange("")
+                        onNewPasswordChange("")
+                        onConfirmNewPasswordChange("")
+                    } else {
+                        errorMessage = "Failed to change password. Check your current password."
+                        snackbarHostState.showSnackbar("Failed to change password.")
+                    }
+                }
+            },
+            enabled = uiState.currentPassword.isNotBlank() && uiState.newPassword.isNotBlank() && uiState.confirmNewPassword.isNotBlank()
+        ) {
+            Text("Save New Password")
+        }
     }
 }

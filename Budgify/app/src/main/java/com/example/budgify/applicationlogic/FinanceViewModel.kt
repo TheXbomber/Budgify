@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.budgify.auth.AuthService
 import com.example.budgify.entities.Account
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.DefaultCategories
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -32,7 +34,36 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() {
+class FinanceViewModel(
+    private val repository: FinanceRepository,
+    private val authService: AuthService
+) : ViewModel() {
+
+    private val _userId = MutableStateFlow<String?>(null)
+    val userId: StateFlow<String?> = _userId.asStateFlow()
+
+    private val _oneTimeSnackbarMessage = MutableStateFlow<String?>(null)
+    val oneTimeSnackbarMessage: StateFlow<String?> = _oneTimeSnackbarMessage.asStateFlow()
+
+    fun showSnackbar(message: String) {
+        _oneTimeSnackbarMessage.value = message
+    }
+
+    fun onSnackbarShown() {
+        _oneTimeSnackbarMessage.value = null
+    }
+
+    init {
+        viewModelScope.launch {
+            _userId.value = authService.getCurrentUser()?.uid
+        }
+    }
+
+    fun onUserLoggedIn() {
+        viewModelScope.launch {
+            _userId.value = authService.getCurrentUser()?.uid
+        }
+    }
 
     private val _snackbarMessages = MutableSharedFlow<String>()
     val snackbarMessages: Flow<String> = _snackbarMessages.asSharedFlow()
@@ -72,17 +103,25 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
 
 
     // TRANSACTIONS
-    val allTransactionsWithDetails = repository.getAllTransactionsWithDetails().stateIn(
+    val allTransactionsWithDetails = userId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getAllTransactionsWithDetails(userId)
+        } else {
+            MutableStateFlow(emptyList())
+        }
+    }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
     )
+
     fun addTransaction(myTransaction: MyTransaction) {
         viewModelScope.launch {
             repository.insertTransaction(myTransaction)
             repository.updateAccountBalance(myTransaction.accountId)
         }
     }
+
     suspend fun updateTransaction(myTransaction: MyTransaction) {
         val oldTransaction = withContext(Dispatchers.IO) {
             repository.getTransactionById(myTransaction.id)
@@ -105,6 +144,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
             }
         }
     }
+
     fun deleteTransaction(myTransaction: MyTransaction) {
         viewModelScope.launch {
             repository.deleteTransaction(myTransaction)
@@ -113,21 +153,30 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
     }
 
     // OBJECTIVES
-    val allObjectives = repository.getAllObjectives().stateIn(
+    val allObjectives = userId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getAllObjectives(userId)
+        } else {
+            MutableStateFlow(emptyList())
+        }
+    }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
     )
+
     fun addObjective(objective: Objective) {
         viewModelScope.launch {
             repository.insertObjective(objective)
         }
     }
+
     fun updateObjective(objective: Objective) {
         viewModelScope.launch {
             repository.updateObjective(objective)
         }
     }
+
     fun deleteObjective(objective: Objective) {
         viewModelScope.launch {
             repository.deleteObjective(objective)
@@ -213,7 +262,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 }
 
                 val defaultCategory = withContext(Dispatchers.IO) {
-                    repository.getCategoryByDescription(defaultCategoryDescription)
+                    repository.getCategoryByDescription(defaultCategoryDescription, userId.value!!)
                 }
                 val categoryIdForTransaction = defaultCategory?.id
 
@@ -222,6 +271,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 }
 
                 val newTransaction = MyTransaction(
+                    userId = userId.value!!,
                     accountId = accountId,
                     type = transactionType,
                     date = LocalDate.now(),
@@ -262,7 +312,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 }
 
                 val defaultCategory = withContext(Dispatchers.IO) {
-                    repository.getCategoryByDescription(defaultCategoryDescription)
+                    repository.getCategoryByDescription(defaultCategoryDescription, userId.value!!)
                 }
 
                 val categoryIdForTransaction = defaultCategory?.id
@@ -272,6 +322,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 }
 
                 val newTransaction = MyTransaction(
+                    userId = userId.value!!,
                     accountId = accountId,
                     type = transactionType,
                     date = LocalDate.now(),
@@ -401,11 +452,18 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
 
 
     //CATEGORIES
-    val allCategories = repository.getAllCategories().stateIn(
+    val allCategories = userId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getAllCategories(userId)
+        } else {
+            MutableStateFlow(emptyList())
+        }
+    }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
     )
+
     private val defaultCategoryDescriptions = setOf(
         DefaultCategories.OBJECTIVES_EXP.desc,
         DefaultCategories.OBJECTIVES_INC.desc,
@@ -414,11 +472,13 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
         DefaultCategories.DEBT_EXP.desc,
         DefaultCategories.DEBT_INC.desc
     )
+
     suspend fun isDefaultCategory(categoryId: Int?): Boolean {
         if (categoryId == null) return false
         val category = repository.getCategoryByIdNonFlow(categoryId)
         return category?.desc in defaultCategoryDescriptions
     }
+
     val categoriesForTransactionDialog: Flow<List<Category>> = allCategories.map { categories ->
         val defaultCategoryDescriptions = setOf(
             DefaultCategories.OBJECTIVES_EXP.desc,
@@ -432,6 +492,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
             defaultCategoryDescriptions.contains(category.desc)
         }
     }
+
     fun addCategory(category: Category, onCategoryCreated: (Category) -> Unit) {
         viewModelScope.launch {
             val newId = repository.insertCategory(category)
@@ -439,7 +500,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 val createdCategory = category.copy(id = newId.toInt())
                 onCategoryCreated(createdCategory)
             } else {
-                val existingCategory = repository.getCategoryByDescription(category.desc)
+                val existingCategory = repository.getCategoryByDescription(category.desc, userId.value!!)
                 if (existingCategory != null) {
                     onCategoryCreated(existingCategory)
                 } else {
@@ -448,11 +509,13 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
             }
         }
     }
+
     fun updateCategory(category: Category) {
         viewModelScope.launch {
             repository.updateCategory(category)
         }
     }
+
     fun deleteCategory(category: Category) {
         viewModelScope.launch {
             repository.deleteCategory(category)
@@ -460,26 +523,36 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
     }
 
     // ACCOUNTS
-    val allAccounts = repository.getAllAccounts().stateIn(
+    val allAccounts = userId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getAllAccounts(userId)
+        } else {
+            MutableStateFlow(emptyList())
+        }
+    }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         emptyList()
     )
+
     fun addAccount(account: Account) {
         viewModelScope.launch {
             repository.insertAccount(account)
         }
     }
+
     fun updateAccount(account: Account) {
         viewModelScope.launch {
             repository.updateAccount(account)
         }
     }
+
     fun deleteAccount(account: Account) {
         viewModelScope.launch {
             repository.deleteAccount(account)
         }
     }
+
     val hasAccounts: Flow<Boolean> = allAccounts.map { it.isNotEmpty() }
         .stateIn(
             scope = viewModelScope,
@@ -498,7 +571,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
                 return@async false
             }
 
-            val transactionsForAccount = repository.getTransactionsForAccount(accountId)
+            val transactionsForAccount = repository.getTransactionsForAccount(accountId, userId.value!!)
 
             var transactionsDelta = 0.0
             transactionsForAccount.forEach { transaction ->
@@ -523,12 +596,17 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
 
 
     // LOANS
-    val allLoans: StateFlow<List<Loan>> = repository.getAllLoans()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    val allLoans: StateFlow<List<Loan>> = userId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getAllLoans(userId)
+        } else {
+            MutableStateFlow(emptyList())
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     val totalActiveCreditLoans: StateFlow<Double> = allLoans
         .map { loans ->
@@ -602,7 +680,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
             }
 
             val defaultCategory = withContext(Dispatchers.IO) {
-                repository.getCategoryByDescription(defaultCategoryDescription)
+                repository.getCategoryByDescription(defaultCategoryDescription, userId.value!!)
             }
             val categoryIdForTransaction = defaultCategory?.id
 
@@ -611,6 +689,7 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
             }
 
             val newTransaction = MyTransaction(
+                userId = userId.value!!,
                 accountId = accountId,
                 type = transactionType,
                 date = loan.startDate,
@@ -703,11 +782,14 @@ class FinanceViewModel(private val repository: FinanceRepository) : ViewModel() 
         }
     }
 
-    class FinanceViewModelFactory(private val repository: FinanceRepository) : ViewModelProvider.Factory {
+    class FinanceViewModelFactory(
+        private val repository: FinanceRepository,
+        private val authService: AuthService
+    ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(FinanceViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return FinanceViewModel(repository) as T
+                return FinanceViewModel(repository, authService) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

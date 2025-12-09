@@ -68,6 +68,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Loan
 import com.example.budgify.entities.LoanType
 import com.example.budgify.navigation.BottomBar
@@ -98,6 +99,7 @@ fun CredDebManagementScreen(
     navController: NavController,
     viewModel: FinanceViewModel,
     credDebManagementViewModel: CredDebManagementViewModel,
+    authViewModel: AuthViewModel,
     initialSelectedLoanType: LoanType? = null
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.CredDebManagement.route) }
@@ -134,7 +136,7 @@ fun CredDebManagementScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,

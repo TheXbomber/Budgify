@@ -13,7 +13,20 @@ import com.example.budgify.entities.MyTransaction
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.Loan
 import com.example.budgify.entities.TransactionWithDetails
+import com.example.budgify.entities.User
 import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface UserDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(user: User)
+
+    @Update
+    suspend fun update(user: User)
+
+    @Query("SELECT * FROM users WHERE email = :email LIMIT 1")
+    suspend fun getUserByEmail(email: String): User?
+}
 
 @Dao
 interface TransactionDao {
@@ -26,18 +39,18 @@ interface TransactionDao {
     @Delete
     suspend fun delete(myTransaction: MyTransaction)
 
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
-    fun getAllTransactions(): Flow<List<MyTransaction>>
+    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY date DESC")
+    fun getAllTransactions(userId: String): Flow<List<MyTransaction>>
 
     @Query("SELECT * FROM transactions WHERE id = :id")
     fun getTransactionById(id: Int): MyTransaction?
 
     @Transaction // Use @Transaction when querying relations
-    @Query("SELECT * FROM transactions")
-    fun getAllTransactionsWithDetails(): Flow<List<TransactionWithDetails>>
+    @Query("SELECT * FROM transactions WHERE userId = :userId")
+    fun getAllTransactionsWithDetails(userId: String): Flow<List<TransactionWithDetails>>
 
-    @Query("SELECT * FROM transactions WHERE accountId = :accountId")
-    suspend fun getTransactionsForAccount(accountId: Int): List<MyTransaction> // Return List<MyTransaction>
+    @Query("SELECT * FROM transactions WHERE accountId = :accountId AND userId = :userId")
+    suspend fun getTransactionsForAccount(accountId: Int, userId: String): List<MyTransaction> // Return List<MyTransaction>
 
 }
 
@@ -52,8 +65,8 @@ interface AccountDao {
     @Delete
     suspend fun delete(account: Account)
 
-    @Query("SELECT * FROM accounts ORDER BY title ASC")
-    fun getAllAccounts(): Flow<List<Account>>
+    @Query("SELECT * FROM accounts WHERE userId = :userId ORDER BY title ASC")
+    fun getAllAccounts(userId: String): Flow<List<Account>>
 
     @Query("SELECT * FROM accounts WHERE id = :id")
     suspend fun getAccountById(id: Int): Account?
@@ -70,8 +83,8 @@ interface ObjectiveDao {
     @Delete
     suspend fun delete(objective: Objective)
 
-    @Query("SELECT * FROM objectives ORDER BY startDate ASC")
-    fun getAllGoalsByDate(): Flow<List<Objective>>
+    @Query("SELECT * FROM objectives WHERE userId = :userId ORDER BY startDate ASC")
+    fun getAllGoalsByDate(userId: String): Flow<List<Objective>>
 
     @Query("SELECT * FROM objectives WHERE id = :id")
     fun getGoalById(id: Int): Flow<Objective>
@@ -82,8 +95,8 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(category: Category): Long
 
-    @Query("SELECT * FROM categories WHERE `desc` = :description LIMIT 1")
-    suspend fun getCategoryByDescriptionSuspend(description: String): Category?
+    @Query("SELECT * FROM categories WHERE `desc` = :description AND userId = :userId LIMIT 1")
+    suspend fun getCategoryByDescriptionSuspend(description: String, userId: String): Category?
 
     @Update
     suspend fun update(category: Category)
@@ -91,8 +104,8 @@ interface CategoryDao {
     @Delete
     suspend fun delete(category: Category)
 
-    @Query("SELECT * FROM categories ORDER BY id ASC")
-    fun getAllCategories(): Flow<List<Category>>
+    @Query("SELECT * FROM categories WHERE userId = :userId ORDER BY id ASC")
+    fun getAllCategories(userId: String): Flow<List<Category>>
 
     @Query("SELECT * FROM categories WHERE id = :id")
     fun getCategoryById(id: Int): Flow<Category>
@@ -113,6 +126,6 @@ interface LoanDao {
     @Delete
     suspend fun delete(loan: Loan)
 
-    @Query("SELECT * FROM loans ORDER BY startDate DESC")
-    fun getAllLoans(): Flow<List<Loan>>
+    @Query("SELECT * FROM loans WHERE userId = :userId ORDER BY startDate DESC")
+    fun getAllLoans(userId: String): Flow<List<Loan>>
 }

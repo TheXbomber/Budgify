@@ -68,6 +68,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Objective
 import com.example.budgify.entities.ObjectiveType
 import com.example.budgify.navigation.BottomBar
@@ -85,7 +86,8 @@ import java.time.format.DateTimeFormatter
 fun ObjectivesManagementScreen(
     navController: NavController,
     viewModel: FinanceViewModel,
-    objectivesManagementViewModel: ObjectivesManagementViewModel
+    objectivesManagementViewModel: ObjectivesManagementViewModel,
+    authViewModel: AuthViewModel
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.ObjectivesManagement.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -115,7 +117,7 @@ fun ObjectivesManagementScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
         bottomBar = {
             BottomBar(
                 navController,

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -49,6 +50,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +70,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.CategoryType
 import com.example.budgify.entities.Loan
@@ -81,6 +84,7 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.screen.AddCategoryDialog
 import com.example.budgify.screen.items
 import com.example.budgify.screen.smallTextStyle
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -88,9 +92,9 @@ import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TopBar(navController: NavController, currentRoute: String) {
+fun TopBar(navController: NavController, currentRoute: String, authViewModel: AuthViewModel, isHomeScreen: Boolean) {
     val title = when (currentRoute) {
-        "home_screen" -> "Dashboard"
+        ScreenRoutes.Home.route -> "Dashboard"
         "objectives_screen" -> "Goals and Stats"
         "objectives_management_screen" -> "Manage Goals"
         "settings_screen" -> "Settings"
@@ -100,6 +104,9 @@ fun TopBar(navController: NavController, currentRoute: String) {
         "categories_screen" -> "Categories"
         else -> ""
     }
+
+    var showLogoutDialog by remember { mutableStateOf(false) } // State for logout dialog
+
     CenterAlignedTopAppBar(
         title = { Text(title, fontSize = 30.sp) },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -107,7 +114,11 @@ fun TopBar(navController: NavController, currentRoute: String) {
             titleContentColor = MaterialTheme.colorScheme.onSurface
         ),
         navigationIcon = {
-            if (currentRoute != ScreenRoutes.Home.route) {
+            if (isHomeScreen) {
+                IconButton(onClick = { showLogoutDialog = true }) { // Show dialog on click
+                    Icon(Icons.Filled.Logout, contentDescription = "Logout", modifier = Modifier.size(50.dp), tint = MaterialTheme.colorScheme.onSurface)
+                }
+            } else {
                 IconButton(onClick = {
                     navController.navigate(ScreenRoutes.Home.route) {
                         popUpTo(navController.graph.findStartDestination().id) {
@@ -136,6 +147,33 @@ fun TopBar(navController: NavController, currentRoute: String) {
 
         }
     )
+
+    if (showLogoutDialog) {
+        val scope = rememberCoroutineScope()
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Confirm Logout") },
+            text = { Text("Are you sure you want to log out?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        authViewModel.logout()
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                    showLogoutDialog = false
+                }) {
+                    Text("Logout", color = MaterialTheme.colorScheme.error) // Added color
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { // Changed to TextButton
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -295,6 +333,7 @@ fun AddTransactionDialog(
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var descriptionError by remember { mutableStateOf<String?>(null) }
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -508,8 +547,9 @@ fun AddTransactionDialog(
                     enabled = description.isNotBlank() && amount.isNotBlank() && selectedDate != null && selectedAccountId != null,
                     onClick = {
                         val amountDouble = amount.toDoubleOrNull()
-                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && selectedAccountId != null) {
+                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && selectedAccountId != null && userId != null) {
                             val newTransaction = MyTransaction(
+                                userId = userId!!,
                                 accountId = selectedAccountId!!,
                                 type = selectedType,
                                 date = selectedDate!!,
@@ -569,11 +609,14 @@ fun AddTransactionDialog(
         AddCategoryDialog(
             onDismiss = { showAddCategoryDialog = false },
             initialType = null,
-            onCategoryAdd = { newCategory ->
-                viewModel.addCategory(newCategory) {
-                    selectedCategoryId = it.id
-                    selectedCategory = it
-                    showAddCategoryDialog = false
+            onCategoryAdd = { description, type ->
+                if (userId != null) {
+                    val newCategory = Category(userId = userId!!, type = type, desc = description)
+                    viewModel.addCategory(newCategory) {
+                        selectedCategoryId = it.id
+                        selectedCategory = it
+                        showAddCategoryDialog = false
+                    }
                 }
             }
         )
@@ -593,6 +636,7 @@ fun AddObjectiveDialog(
     var selectedType by remember { mutableStateOf(ObjectiveType.EXPENSE) }
     var showDatePickerDialog by remember { mutableStateOf(false) }
     val objectiveTypes = ObjectiveType.entries.toList()
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     var descriptionError by remember { mutableStateOf<String?>(null) }
 
@@ -697,8 +741,9 @@ fun AddObjectiveDialog(
                     enabled = description.isNotBlank() && amount.isNotBlank() && selectedDate != null,
                     onClick = {
                         val amountDouble = amount.toDoubleOrNull()
-                        if (description.isNotBlank() && amountDouble != null && selectedDate != null) {
+                        if (description.isNotBlank() && amountDouble != null && selectedDate != null && userId != null) {
                             val newObjective = Objective(
+                                userId = userId!!,
                                 id = 0,
                                 type = selectedType,
                                 desc = description,
@@ -768,6 +813,7 @@ fun AddLoanDialog(
     var selectedEndDate by remember { mutableStateOf<LocalDate?>(null) }
     var selectedType by remember { mutableStateOf(LoanType.DEBT) }
     val loanTypes = LoanType.entries.toList()
+    val userId by viewModel.userId.collectAsStateWithLifecycle()
 
     val accounts by viewModel.allAccounts.collectAsStateWithLifecycle()
     var accountExpanded by remember { mutableStateOf(false) }
@@ -1007,17 +1053,19 @@ fun AddLoanDialog(
                             triggerError("End date cannot be before the start date.")
                             return@Button
                         }
-
-                        val newLoan = Loan(
-                            desc = description,
-                            amount = amountDouble,
-                            type = selectedType,
-                            startDate = selectedStartDate!!,
-                            endDate = selectedEndDate
-                        )
-                        viewModel.addLoan(newLoan, selectedAccountId!!)
-                        onLoanAdded(newLoan)
-                        onDismiss()
+                        if (userId != null) {
+                            val newLoan = Loan(
+                                userId = userId!!,
+                                desc = description,
+                                amount = amountDouble,
+                                type = selectedType,
+                                startDate = selectedStartDate!!,
+                                endDate = selectedEndDate
+                            )
+                            viewModel.addLoan(newLoan, selectedAccountId!!)
+                            onLoanAdded(newLoan)
+                            onDismiss()
+                        }
                     }
                 ) {
                     Text("Add")

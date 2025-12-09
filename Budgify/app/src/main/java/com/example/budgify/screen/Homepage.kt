@@ -87,6 +87,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Account
 import com.example.budgify.entities.MyTransaction
 import com.example.budgify.entities.TransactionType
@@ -113,12 +114,21 @@ val items = listOf(
 )
 
 @Composable
-fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepageViewModel: HomepageViewModel) {
+fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepageViewModel: HomepageViewModel, authViewModel: AuthViewModel) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Home.route) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uiState by homepageViewModel.uiState.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
+
+    val oneTimeSnackbarMessage by viewModel.oneTimeSnackbarMessage.collectAsStateWithLifecycle()
+
+    LaunchedEffect(oneTimeSnackbarMessage) {
+        oneTimeSnackbarMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.onSnackbarShown()
+        }
+    }
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
@@ -129,7 +139,7 @@ fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepage
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = { TopBar(navController, currentRoute) },
+        topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = true) },
         bottomBar = {
             BottomBar(
                 navController,
@@ -682,12 +692,7 @@ fun AddAccountDialog(
                     onClick = {
                         val balanceDouble = initialBalance.replace(',', '.').toDoubleOrNull()
                         if (balanceDouble != null) {
-                            val newAccount = Account(
-                                title = accountTitle.trim(),
-                                amount = balanceDouble,
-                                initialAmount = balanceDouble
-                            )
-                            viewModel.addAccount(newAccount)
+                            viewModel.addAccount(accountTitle.trim(), balanceDouble)
                         }
                     }) {
                     Text("Add")
@@ -747,12 +752,7 @@ fun EditAccountDialog(
             ) {
                 Button(
                     onClick = {
-                        val newDisplayedBalanceDouble = currentBalanceDisplayString.replace(',', '.').toDoubleOrNull()
-                        if (newDisplayedBalanceDouble != null && accountTitle.isNotBlank()) {
-                            val balanceDifference = newDisplayedBalanceDouble - accountToEdit.amount
-                            val newCalculatedInitialAmount = accountToEdit.initialAmount + balanceDifference
-                            viewModel.updateAccount(accountToEdit, accountTitle, newCalculatedInitialAmount)
-                        }
+                        viewModel.updateAccount(accountToEdit, accountTitle, currentBalanceDisplayString)
                     }
                 ) {
                     Text("Save Changes")

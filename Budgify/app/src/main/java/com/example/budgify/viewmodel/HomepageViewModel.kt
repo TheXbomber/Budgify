@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -188,22 +189,36 @@ class HomepageViewModel(private val financeViewModel: FinanceViewModel) : ViewMo
         _uiState.update { it.copy(snackbarMessage = null) }
     }
 
-    fun addAccount(account: Account) {
+    fun addAccount(title: String, balance: Double) {
         viewModelScope.launch {
-            financeViewModel.addAccount(account)
-            _uiState.update { it.copy(showAddAccountDialog = false, snackbarMessage = "Account '${account.title}' added!") }
+            val userId = financeViewModel.userId.first()
+            if (userId != null) {
+                val newAccount = Account(
+                    userId = userId,
+                    title = title,
+                    amount = balance,
+                    initialAmount = balance
+                )
+                financeViewModel.addAccount(newAccount)
+                _uiState.update { it.copy(showAddAccountDialog = false, snackbarMessage = "Account '$title' added!") }
+            }
         }
     }
 
-    fun updateAccount(account: Account, newTitle: String, newInitialAmount: Double) {
+    fun updateAccount(accountToEdit: Account, newTitle: String, currentBalanceDisplayString: String) {
         viewModelScope.launch {
-            financeViewModel.updateAccountAndRecalculateBalance(account.id, newTitle, newInitialAmount)
-            _uiState.update {
-                it.copy(
-                    showEditAccountDialog = false,
-                    accountToAction = null,
-                    snackbarMessage = "Account '${newTitle}' updated!"
-                )
+            val newDisplayedBalanceDouble = currentBalanceDisplayString.replace(',', '.').toDoubleOrNull()
+            if (newDisplayedBalanceDouble != null && newTitle.isNotBlank()) {
+                val balanceDifference = newDisplayedBalanceDouble - accountToEdit.amount
+                val newCalculatedInitialAmount = accountToEdit.initialAmount + balanceDifference
+                financeViewModel.updateAccountAndRecalculateBalance(accountToEdit.id, newTitle, newCalculatedInitialAmount)
+                _uiState.update {
+                    it.copy(
+                        showEditAccountDialog = false,
+                        accountToAction = null,
+                        snackbarMessage = "Account '${newTitle}' updated!"
+                    )
+                }
             }
         }
     }
