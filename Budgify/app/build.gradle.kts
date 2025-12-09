@@ -60,6 +60,7 @@ dependencies {
 
     implementation("androidx.room:room-runtime:2.7.1")
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.runtime)
     annotationProcessor("androidx.room:room-compiler:2.7.1") // For Java users
     // Per utenti Kotlin con KAPT
     kapt("androidx.room:room-compiler:2.7.1")

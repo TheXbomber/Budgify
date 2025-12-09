@@ -1,5 +1,6 @@
 package com.example.budgify.navigation
 
+import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.net.Uri
@@ -57,6 +58,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +104,10 @@ import com.example.budgify.screen.smallTextStyle
 import com.example.budgify.utils.processImageForReceipt
 import com.example.budgify.utils.parseTransactionDate
 import com.example.budgify.utils.mapCategoryToTransactionType
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
@@ -326,7 +332,7 @@ fun BottomBar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun AddTransactionDialog(
     viewModel: FinanceViewModel,
@@ -363,8 +369,22 @@ fun AddTransactionDialog(
     var showScanErrorDialog by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf("") }
     var tempImageUri by remember { mutableStateOf<Uri?>(null) } // For camera capture
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+    var permissionDeniedMessage by remember { mutableStateOf("") }
+
+    // Flags to track if a launch is pending after permission grant
+    var pendingCameraLaunch by remember { mutableStateOf(false) }
+    var pendingGalleryLaunch by remember { mutableStateOf(false) }
 
     val receiptScanRepository = remember { ReceiptScanRepository() }
+
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    }
+    val storagePermissionState = rememberPermissionState(storagePermission)
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success && tempImageUri != null) {
@@ -426,6 +446,28 @@ fun AddTransactionDialog(
         }
     }
 
+    // LaunchedEffect to react to camera permission status changes
+    LaunchedEffect(cameraPermissionState.status) {
+        if (pendingCameraLaunch && cameraPermissionState.status.isGranted) {
+            pendingCameraLaunch = false
+            val photoFile = File(context.cacheDir, "receipt_image.jpg")
+            tempImageUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                photoFile
+            )
+            cameraLauncher.launch(tempImageUri!!)
+        }
+    }
+
+    // LaunchedEffect to react to storage permission status changes
+    LaunchedEffect(storagePermissionState.status) {
+        if (pendingGalleryLaunch && storagePermissionState.status.isGranted) {
+            pendingGalleryLaunch = false
+            galleryLauncher.launch("image/*")
+        }
+    }
+
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -457,18 +499,36 @@ fun AddTransactionDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = {
-                    val photoFile = File(context.cacheDir, "receipt_image.jpg")
-                    tempImageUri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        photoFile
-                    )
-                    cameraLauncher.launch(tempImageUri!!)
+                    if (cameraPermissionState.status.isGranted) {
+                        val photoFile = File(context.cacheDir, "receipt_image.jpg")
+                        tempImageUri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            photoFile
+                        )
+                        cameraLauncher.launch(tempImageUri!!)
+                    } else if (cameraPermissionState.status.shouldShowRationale) {
+                        permissionDeniedMessage = "Camera permission is required to scan receipts using the camera. Please grant it."
+                        showPermissionRationaleDialog = true
+                    } else {
+                        pendingCameraLaunch = true // Set flag, then request
+                        cameraPermissionState.launchPermissionRequest()
+                    }
                 }) {
                     Icon(Icons.Filled.CameraAlt, contentDescription = "Scan with Camera", modifier = Modifier.size(36.dp))
                 }
                 Spacer(modifier = Modifier.width(16.dp))
-                IconButton(onClick = { galleryLauncher.launch("image/*") }) {
+                IconButton(onClick = {
+                    if (storagePermissionState.status.isGranted) {
+                        galleryLauncher.launch("image/*")
+                    } else if (storagePermissionState.status.shouldShowRationale) {
+                        permissionDeniedMessage = "Storage permission is required to select receipts from your gallery. Please grant it."
+                        showPermissionRationaleDialog = true
+                    } else {
+                        pendingGalleryLaunch = true // Set flag, then request
+                        storagePermissionState.launchPermissionRequest()
+                    }
+                }) {
                     Icon(Icons.Filled.Image, contentDescription = "Select from Gallery", modifier = Modifier.size(36.dp))
                 }
             }
@@ -750,7 +810,20 @@ fun AddTransactionDialog(
             }
         )
     }
-} 
+
+    if (showPermissionRationaleDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationaleDialog = false },
+            title = { Text("Permissions Required") },
+            text = { Text(permissionDeniedMessage) },
+            confirmButton = {
+                TextButton(onClick = { showPermissionRationaleDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1239,14 +1312,9 @@ fun AddLoanDialog(
                 TextButton(
                     onClick = {
                         showDatePickerDialog = false
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val newSelectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                            when (datePickerTarget) {
-                                "START" -> selectedStartDate = newSelectedDate
-                                "END" -> selectedEndDate = newSelectedDate
-                            }
+                        datePickerState.selectedDateMillis?.let {
+                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                         }
-                        datePickerTarget = null
                     },
                     enabled = confirmEnabled.value
                 ) {
