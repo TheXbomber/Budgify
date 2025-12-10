@@ -1,14 +1,19 @@
 package com.example.budgify.applicationlogic
 
 import android.graphics.Bitmap
-import com.example.budgify.data.OcrResponse
+import android.util.Log
 import com.example.budgify.data.TransactionResponse
 import com.example.budgify.network.RetrofitClient
+import com.example.budgify.utils.findDateInText
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
+import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
+import kotlin.math.max
+
+private const val TAG = "ReceiptScanRepository"
 
 class ReceiptScanRepository {
 
@@ -43,38 +48,42 @@ class ReceiptScanRepository {
     }
 
     private fun parseOcrText(text: String): TransactionResponse {
-        // This is a very basic implementation. You will likely need to make this more robust.
         val lines = text.split("\\r?\\n".toRegex())
+        var highestAmount = 0.0
 
-        var description = "Scanned Receipt"
-        var amount = 0.0
-        var date = ""
-        val category = "General" // Default category
+        // Regex to find monetary values (supports both . and , as decimal separators)
+        val amountPattern = Pattern.compile("(\\d+[,.]\\d{2})")
 
-        // Simple logic to find total amount
-        val totalPattern = Pattern.compile("(?i)(total|amount|\\s)\\s*\\$?(\\d+\\.\\d{2})")
         for (line in lines) {
-            val matcher = totalPattern.matcher(line)
-            if (matcher.find()) {
+            val matcher = amountPattern.matcher(line)
+            while (matcher.find()) {
                 try {
-                    amount = matcher.group(2)?.toDouble() ?: 0.0
+                    // Normalize the found amount string by replacing comma with a dot
+                    val amountString = matcher.group(1)?.replace(',', '.')
+                    val currentAmount = amountString?.toDouble() ?: 0.0
+                    highestAmount = max(highestAmount, currentAmount)
                 } catch (e: NumberFormatException) {
-                    // Ignore
+                    // Ignore if parsing fails
                 }
             }
         }
-        
-        // You can add more logic here to find description and date
-        if (lines.isNotEmpty()) {
-            description = lines[0] // Use the first line as a description
-        }
 
+        // Find the first non-empty line for the description (usually the store name)
+        val description = lines.firstOrNull { it.isNotBlank() }?.trim() ?: "Scanned Receipt"
+
+        // Use the utility to find the date
+        val date = findDateInText(text)
+        val formattedDate = date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+
+        Log.d(TAG, "Parsed Description: $description")
+        Log.d(TAG, "Parsed Amount: $highestAmount")
+        Log.d(TAG, "Parsed Date: $formattedDate")
 
         return TransactionResponse(
-            amount = amount,
+            amount = highestAmount,
             description = description,
-            date = date, // You need to implement date parsing
-            category = category
+            date = formattedDate,
+            category = "General" // Default category
         )
     }
 }
