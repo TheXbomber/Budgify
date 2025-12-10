@@ -1,5 +1,10 @@
 package com.example.budgify.navigation
 
+import android.Manifest
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,19 +19,23 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -46,16 +55,19 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color.Companion.Transparent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -64,12 +76,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.budgify.R
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.applicationlogic.ReceiptScanRepository
 import com.example.budgify.auth.AuthViewModel
 import com.example.budgify.entities.Category
 import com.example.budgify.entities.CategoryType
@@ -84,7 +99,14 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.screen.AddCategoryDialog
 import com.example.budgify.screen.items
 import com.example.budgify.screen.smallTextStyle
+import com.example.budgify.utils.parseTransactionDate
+import com.example.budgify.utils.processImageForReceipt
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -306,13 +328,16 @@ fun BottomBar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun AddTransactionDialog(
     viewModel: FinanceViewModel,
     onDismiss: () -> Unit,
     onTransactionAdded: (MyTransaction) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val categoriesForDropdown by viewModel.categoriesForTransactionDialog.collectAsStateWithLifecycle(
@@ -334,6 +359,98 @@ fun AddTransactionDialog(
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var descriptionError by remember { mutableStateOf<String?>(null) }
     val userId by viewModel.userId.collectAsStateWithLifecycle()
+
+    // Receipt Scanning States
+    var isLoadingReceiptScan by remember { mutableStateOf(false) }
+    var showScanErrorDialog by remember { mutableStateOf(false) }
+    var scanErrorMessage by remember { mutableStateOf("") }
+    var tempImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+    var permissionDeniedMessage by remember { mutableStateOf("") }
+
+    // Flags to track if a launch is pending after permission grant
+    var pendingCameraLaunch by remember { mutableStateOf(false) }
+    var pendingGalleryLaunch by remember { mutableStateOf(false) }
+
+    val receiptScanRepository = remember { ReceiptScanRepository() }
+
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    }
+    val storagePermissionState = rememberPermissionState(storagePermission)
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val tempImageUri = tempImageUriString?.let { Uri.parse(it) }
+        if (success && tempImageUri != null) {
+            scope.launch {
+                processImageForReceipt(
+                    imageUri = tempImageUri,
+                    context = context,
+                    receiptScanRepository = receiptScanRepository,
+                    onLoading = { isLoadingReceiptScan = it },
+                    onSuccess = { parsedTransaction ->
+                        description = parsedTransaction.description
+                        amount = parsedTransaction.amount.toString()
+                        selectedDate = parseTransactionDate(parsedTransaction.date)
+                    },
+                    onError = { message ->
+                        scanErrorMessage = message
+                        showScanErrorDialog = true
+                    }
+                )
+            }
+        }
+        tempImageUriString = null // Clear temp URI after processing
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                processImageForReceipt(
+                    imageUri = uri,
+                    context = context,
+                    receiptScanRepository = receiptScanRepository,
+                    onLoading = { isLoadingReceiptScan = it },
+                    onSuccess = { parsedTransaction ->
+                        description = parsedTransaction.description
+                        amount = parsedTransaction.amount.toString()
+                        selectedDate = parseTransactionDate(parsedTransaction.date)
+                    },
+                    onError = { message ->
+                        scanErrorMessage = message
+                        showScanErrorDialog = true
+                    }
+                )
+            }
+        }
+    }
+
+    // LaunchedEffect to react to camera permission status changes
+    LaunchedEffect(cameraPermissionState.status) {
+        if (pendingCameraLaunch && cameraPermissionState.status.isGranted) {
+            pendingCameraLaunch = false
+            val photoFile = File(context.cacheDir, "receipt_image.jpg")
+            val newUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                photoFile
+            )
+            tempImageUriString = newUri.toString()
+            cameraLauncher.launch(newUri)
+        }
+    }
+
+    // LaunchedEffect to react to storage permission status changes
+    LaunchedEffect(storagePermissionState.status) {
+        if (pendingGalleryLaunch && storagePermissionState.status.isGranted) {
+            pendingGalleryLaunch = false
+            galleryLauncher.launch("image/*")
+        }
+    }
+
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -359,7 +476,51 @@ fun AddTransactionDialog(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 8.dp)
             )
-
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    if (cameraPermissionState.status.isGranted) {
+                        val photoFile = File(context.cacheDir, "receipt_image.jpg")
+                        val newUri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            photoFile
+                        )
+                        tempImageUriString = newUri.toString()
+                        cameraLauncher.launch(newUri)
+                    } else if (cameraPermissionState.status.shouldShowRationale) {
+                        permissionDeniedMessage = "Camera permission is required to scan receipts using the camera. Please grant it."
+                        showPermissionRationaleDialog = true
+                    } else {
+                        pendingCameraLaunch = true // Set flag, then request
+                        cameraPermissionState.launchPermissionRequest()
+                    }
+                }) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = "Scan with Camera", modifier = Modifier.size(36.dp))
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                IconButton(onClick = {
+                    if (storagePermissionState.status.isGranted) {
+                        galleryLauncher.launch("image/*")
+                    } else if (storagePermissionState.status.shouldShowRationale) {
+                        permissionDeniedMessage = "Storage permission is required to select receipts from your gallery. Please grant it."
+                        showPermissionRationaleDialog = true
+                    } else {
+                        pendingGalleryLaunch = true // Set flag, then request
+                        storagePermissionState.launchPermissionRequest()
+                    }
+                }) {
+                    Icon(Icons.Filled.Image, contentDescription = "Select from Gallery", modifier = Modifier.size(36.dp))
+                }
+            }
+            if (isLoadingReceiptScan) {
+                CircularProgressIndicator(modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentWidth(Alignment.CenterHorizontally))
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             TextField(
@@ -567,7 +728,6 @@ fun AddTransactionDialog(
         }
     }
 
-
     if (showDatePickerDialog) {
         val initialDateMillis = LocalDate.now().atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
@@ -617,6 +777,32 @@ fun AddTransactionDialog(
                         selectedCategory = it
                         showAddCategoryDialog = false
                     }
+                }
+            }
+        )
+    }
+
+    if (showScanErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showScanErrorDialog = false },
+            title = { Text("Receipt Scan Error") },
+            text = { Text(scanErrorMessage) },
+            confirmButton = {
+                TextButton(onClick = { showScanErrorDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (showPermissionRationaleDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationaleDialog = false },
+            title = { Text("Permissions Required") },
+            text = { Text(permissionDeniedMessage) },
+            confirmButton = {
+                TextButton(onClick = { showPermissionRationaleDialog = false }) {
+                    Text("OK")
                 }
             }
         )
@@ -1110,14 +1296,9 @@ fun AddLoanDialog(
                 TextButton(
                     onClick = {
                         showDatePickerDialog = false
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val newSelectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                            when (datePickerTarget) {
-                                "START" -> selectedStartDate = newSelectedDate
-                                "END" -> selectedEndDate = newSelectedDate
-                            }
+                        datePickerState.selectedDateMillis?.let {
+                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                         }
-                        datePickerTarget = null
                     },
                     enabled = confirmEnabled.value
                 ) {
