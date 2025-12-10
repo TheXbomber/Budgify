@@ -61,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -363,7 +364,7 @@ fun AddTransactionDialog(
     var isLoadingReceiptScan by remember { mutableStateOf(false) }
     var showScanErrorDialog by remember { mutableStateOf(false) }
     var scanErrorMessage by remember { mutableStateOf("") }
-    var tempImageUri by remember { mutableStateOf<Uri?>(null) } // For camera capture
+    var tempImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
     var permissionDeniedMessage by remember { mutableStateOf("") }
 
@@ -382,10 +383,11 @@ fun AddTransactionDialog(
     val storagePermissionState = rememberPermissionState(storagePermission)
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        val tempImageUri = tempImageUriString?.let { Uri.parse(it) }
         if (success && tempImageUri != null) {
             scope.launch {
                 processImageForReceipt(
-                    imageUri = tempImageUri!!,
+                    imageUri = tempImageUri,
                     context = context,
                     receiptScanRepository = receiptScanRepository,
                     onLoading = { isLoadingReceiptScan = it },
@@ -401,7 +403,7 @@ fun AddTransactionDialog(
                 )
             }
         }
-        tempImageUri = null // Clear temp URI after processing
+        tempImageUriString = null // Clear temp URI after processing
     }
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -431,12 +433,13 @@ fun AddTransactionDialog(
         if (pendingCameraLaunch && cameraPermissionState.status.isGranted) {
             pendingCameraLaunch = false
             val photoFile = File(context.cacheDir, "receipt_image.jpg")
-            tempImageUri = FileProvider.getUriForFile(
+            val newUri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 photoFile
             )
-            cameraLauncher.launch(tempImageUri!!)
+            tempImageUriString = newUri.toString()
+            cameraLauncher.launch(newUri)
         }
     }
 
@@ -481,12 +484,13 @@ fun AddTransactionDialog(
                 IconButton(onClick = {
                     if (cameraPermissionState.status.isGranted) {
                         val photoFile = File(context.cacheDir, "receipt_image.jpg")
-                        tempImageUri = FileProvider.getUriForFile(
+                        val newUri = FileProvider.getUriForFile(
                             context,
                             "${context.packageName}.fileprovider",
                             photoFile
                         )
-                        cameraLauncher.launch(tempImageUri!!)
+                        tempImageUriString = newUri.toString()
+                        cameraLauncher.launch(newUri)
                     } else if (cameraPermissionState.status.shouldShowRationale) {
                         permissionDeniedMessage = "Camera permission is required to scan receipts using the camera. Please grant it."
                         showPermissionRationaleDialog = true
