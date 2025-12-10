@@ -8,8 +8,6 @@ import logging # For logging within Flask app
 app = Flask(__name__)
 
 # --- Configuration for OCR.space ---
-# You need to replace "YOUR_OCR_SPACE_API_KEY" with your actual key.
-# The endpoint is for the free/pro Plan. Use the appropriate one.
 OCR_SPACE_API_KEY = "K82628630788957"
 OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image"
 
@@ -104,48 +102,106 @@ def scan_receipt_ocrspace():
             'details': [str(e)]
         }), 500
 
-# --- Server-side parsing function (improved for robust amount parsing) ---
+# Helper function to convert a currency string (e.g., "1.234,50" or "1,234.50") to a float
+def clean_currency_string(amount_str: str) -> float | None:
+    try:
+        # Heuristic to determine decimal separator based on the last separator before 2 digits
+        # This handles both European (comma decimal) and US (dot decimal) formats
+        amount_str = amount_str.strip()
+
+        # Check for a two-digit decimal part at the end
+        last_decimal_match_comma = re.search(r',(\d{2})$', amount_str)
+        last_decimal_match_dot = re.search(r'\.(\d{2})$', amount_str)
+        
+        # Remove any non-digit/non-separator characters (like $, €, etc.)
+        amount_str = re.sub(r'[^\d\.,]', '', amount_str)
+
+        if last_decimal_match_comma and not last_decimal_match_dot:
+            # European style (comma is decimal, dot is thousand) - e.g., 1.234,50
+            amount_str = amount_str.replace('.', '')  # Remove thousand separators
+            amount_str = amount_str.replace(',', '.')  # Replace decimal comma with dot
+        elif last_decimal_match_dot:
+            # US style (dot is decimal, comma is thousand) - e.g., 1,234.50
+            amount_str = amount_str.replace(',', '')  # Remove thousand separators
+            # No need to replace dot, as it's the decimal separator
+        
+        # Final safety step: ensure we have a valid float string
+        # If the string ends with a comma or dot, assume it's a decimal separator
+        if amount_str.endswith(',') or amount_str.endswith('.'):
+             amount_str = amount_str[:-1] # Remove trailing separator if no decimal part
+
+        return float(amount_str)
+    except ValueError:
+        logger.debug(f"Failed to convert amount string '{amount_str}' to float.")
+        return None
+
+# --- Server-side parsing function (IMPROVED FOR TOTAL AMOUNT) ---
 def parse_ocr_text_server(text: str) -> dict:
     lines = text.split('\n')
-    highest_amount = 0.0
-    description = "Scanned Receipt"
-    transaction_date = date.today()  # Default to today
-
-    # 1. Improved Amount Parsing
-    # Regex to find monetary values, ensuring a decimal part of exactly two digits
-    amount_patterns = [
-        # Prioritize patterns preceded by common "total" keywords
-        re.compile(r'(?:TOTAL|AMOUNT|BALANCE|SUM|DUE|TOTALE|TOTALE COMPLESSIVO|DOVUTO|IMPORTO|IMPORTO DOVUTO)\s*[:\-\s]*\$?€?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b', re.IGNORECASE),
-        # General pattern for numbers that look like currency (e.g., 54.50, 1.234,50, 1,234.50)
-        # Ensure it has a fractional part of exactly two digits
-        re.compile(r'\b\$?€?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b')
+    found_amounts = []
+    
+    # Common keywords associated with the *final* total
+    TOTAL_KEYWORDS = [
+        re.compile(r'(?:TOTAL|AMOUNT|BALANCE|DUE|TOTALE|IMPORTO|NETTO|GRAND TOTAL|IMPORTO DOVUTO)\s*[:\-\s]*', re.IGNORECASE),
+        re.compile(r'TOT\s*[:\-\s]*', re.IGNORECASE)
     ]
 
-    for line in lines:
-        for pattern in amount_patterns:
-            for match in pattern.finditer(line):
-                try:
-                    amount_str = match.group(1)
+    # Common keywords to *exclude* (Subtotal, Tax, Change, Cash)
+    EXCLUSION_KEYWORDS = [
+        re.compile(r'(?:SUBTOTAL|SUB|SOTTOTOTALE|TAX|VAT|IVA|GST|HST|SALES TAX|TASSA)\s*[:\-\s]*', re.IGNORECASE),
+        re.compile(r'(?:CHANGE|CASH|PAID|TENDER|RESTO|CONTANTI)\s*[:\-\s]*', re.IGNORECASE)
+    ]
+    
+    # 1. Extract all potential monetary values and their associated line/keyword context
+    # Regex to find monetary values, prioritizing those with exactly two digits after the last separator
+    # This helps filter out year/ID numbers.
+    AMOUNT_REGEX = re.compile(r'\b\$?€?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b') 
 
-                    # Heuristic to determine decimal separator based on the last separator before 2 digits
-                    last_decimal_match_comma = re.search(r',(\d{2})$', amount_str)
-                    last_decimal_match_dot = re.search(r'\.(\d{2})$', amount_str)
+    for i, line in enumerate(lines):
+        # Clean the line by removing excess spaces and potential currency symbols
+        clean_line = line.strip()
 
-                    if last_decimal_match_comma:
-                        # Assume European style (comma is decimal, dot is thousand)
-                        amount_str = amount_str.replace('.', '')  # Remove thousand separators
-                        amount_str = amount_str.replace(',', '.')  # Replace decimal comma with dot
-                    elif last_decimal_match_dot:
-                        # Assume US style (dot is decimal, comma is thousand)
-                        amount_str = amount_str.replace(',', '')  # Remove thousand separators
-                        # No need to replace dot, as it's already a decimal dot
-                    # If neither, it means it's likely already a simple decimal or integer-like, so no replacement on separators
+        for match in AMOUNT_REGEX.finditer(clean_line):
+            amount_str = match.group(1)
+            
+            # Use the robust cleaner
+            current_amount = clean_currency_string(amount_str)
+            
+            if current_amount is not None:
+                # Determine if the line contains a high-priority "TOTAL" keyword
+                is_total_line = any(pattern.search(clean_line) for pattern in TOTAL_KEYWORDS)
+                
+                # Determine if the line contains an exclusion keyword
+                is_excluded_line = any(pattern.search(clean_line) for pattern in EXCLUSION_KEYWORDS)
+                
+                # We save ALL valid amounts for secondary heuristics
+                found_amounts.append({
+                    'amount': current_amount,
+                    'is_total': is_total_line,
+                    'is_excluded': is_excluded_line,
+                    'line_index': i
+                })
+    # 2. Heuristics to select the final amount
+    final_amount = 0.0
 
-                    current_amount = float(amount_str)
-                    highest_amount = max(highest_amount, current_amount)
-                except ValueError:
-                    logger.debug(f"Failed to convert amount string '{amount_str}' to float during server-side parsing.")
-                    continue
+    # Heuristic A: Look for the *largest* amount marked with a "TOTAL" keyword
+    total_candidates = [a for a in found_amounts if a['is_total'] and not a['is_excluded']]
+    if total_candidates:
+        final_amount = max(c['amount'] for c in total_candidates)
+        logger.info(f"Server: Heuristic A selected final amount: {final_amount} (Largest amount with 'TOTAL' keyword).")
+    
+    # Heuristic B: If no "TOTAL" keyword is found, assume the largest non-excluded amount is the total.
+    if final_amount == 0.0:
+        non_excluded_candidates = [a for a in found_amounts if not a['is_excluded']]
+        if non_excluded_candidates:
+            # The largest number on a receipt is often the total.
+            final_amount = max(c['amount'] for c in non_excluded_candidates)
+            logger.info(f"Server: Heuristic B selected final amount: {final_amount} (Largest non-excluded amount).")
+        
+    # Heuristic C: Fallback to the absolute largest number if no other good candidates.
+    if final_amount == 0.0 and found_amounts:
+        final_amount = max(a['amount'] for a in found_amounts)
+        logger.info(f"Server: Heuristic C selected final amount: {final_amount} (Absolute largest amount).")
 
     # 2. Improved Date Parsing
     # Ordered list of regex patterns and corresponding format strings for datetime.strptime
@@ -207,21 +263,34 @@ def parse_ocr_text_server(text: str) -> dict:
     exclusion_keywords = [
         re.compile(r'TAX(?:ABLE)?', re.IGNORECASE),
         re.compile(r'VAT', re.IGNORECASE),
+        re.compile(r'IVA', re.IGNORECASE),
         re.compile(r'TOTAL', re.IGNORECASE),
+        re.compile(r'TOTALE', re.IGNORECASE),
         re.compile(r'AMOUNT', re.IGNORECASE),
         re.compile(r'BALANCE DUE', re.IGNORECASE),
+        re.compile(r'DOVUTO', re.IGNORECASE),
         re.compile(r'CHANGE', re.IGNORECASE),
+        re.compile(r'RESTO', re.IGNORECASE),
         re.compile(r'CASH', re.IGNORECASE),
+        re.compile(r'CONTANTI', re.IGNORECASE),
         re.compile(r'CREDIT CARD', re.IGNORECASE),
         re.compile(r'DEBIT CARD', re.IGNORECASE),
+        re.compile(r'CARTA', re.IGNORECASE),
         re.compile(r'THANK YOU', re.IGNORECASE),
+        re.compile(r'GRAZIE', re.IGNORECASE),
+        re.compile(r'BENVENUTO', re.IGNORECASE),
+        re.compile(r'BENVENUTO A', re.IGNORECASE),
+        re.compile(r'BENVENUTI', re.IGNORECASE),
+        re.compile(r'BENVENUTI A', re.IGNORECASE),
         re.compile(r'CUSTOMER COPY', re.IGNORECASE),
+        re.compile(r'DOCUMENTO COMMERCIALE', re.IGNORECASE),
         re.compile(r'TRANSACTION(?: ID)?', re.IGNORECASE),
         re.compile(r'ORDER(?: #)?', re.IGNORECASE),
         re.compile(r'SUBTOTAL', re.IGNORECASE),
         re.compile(r'VISA', re.IGNORECASE),
         re.compile(r'MASTERCARD', re.IGNORECASE),
         re.compile(r'TEL:', re.IGNORECASE),
+        re.compile(r'TEL.', re.IGNORECASE),
         re.compile(r'PHONE:', re.IGNORECASE),
         re.compile(r'WWW\.', re.IGNORECASE),
         re.compile(r'\.COM', re.IGNORECASE),
@@ -299,7 +368,7 @@ def parse_ocr_text_server(text: str) -> dict:
         logger.info(f"Server: Truncated description to: '{description}'")
 
     return {
-        "amount": highest_amount,
+        "amount": round(final_amount, 2),
         "description": description,
         "date": transaction_date.strftime("%d/%m/%Y"),  # Format as "dd/MM/yyyy"
         "category": "General"  # Default category, can be improved later
