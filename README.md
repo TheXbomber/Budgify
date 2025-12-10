@@ -1,5 +1,5 @@
 Requirements:
-- [ ] Use at least one public Cloud service (e.g., from https://publicapis.io/)
+- [x] Use at least one public Cloud service (e.g., from https://publicapis.io/)
 - [x] Support multiple users with login and authentication
 - [ ] Include some 2D graphics
 - [ ] Use at least one sensor
