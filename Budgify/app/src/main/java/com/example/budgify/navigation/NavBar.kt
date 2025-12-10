@@ -1,11 +1,8 @@
 package com.example.budgify.navigation
 
 import android.Manifest
-import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -33,8 +30,8 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -84,7 +81,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.example.budgify.R // Assuming R.xml.file_paths exists for FileProvider
+import com.example.budgify.R
 import com.example.budgify.applicationlogic.FinanceViewModel
 import com.example.budgify.applicationlogic.ReceiptScanRepository
 import com.example.budgify.auth.AuthViewModel
@@ -101,9 +98,8 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.screen.AddCategoryDialog
 import com.example.budgify.screen.items
 import com.example.budgify.screen.smallTextStyle
-import com.example.budgify.utils.processImageForReceipt
 import com.example.budgify.utils.parseTransactionDate
-import com.example.budgify.utils.mapCategoryToTransactionType
+import com.example.budgify.utils.processImageForReceipt
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -114,7 +110,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -392,20 +387,12 @@ fun AddTransactionDialog(
                 processImageForReceipt(
                     imageUri = tempImageUri!!,
                     context = context,
-                    viewModel = viewModel,
                     receiptScanRepository = receiptScanRepository,
                     onLoading = { isLoadingReceiptScan = it },
                     onSuccess = { parsedTransaction ->
                         description = parsedTransaction.description
                         amount = parsedTransaction.amount.toString()
                         selectedDate = parseTransactionDate(parsedTransaction.date)
-                        // Attempt to find and set category based on parsedTransaction.category
-                        val matchedCategory = categoriesForDropdown.firstOrNull { it.desc.equals(parsedTransaction.category, ignoreCase = true) }
-                        selectedCategory = matchedCategory
-                        selectedCategoryId = matchedCategory?.id
-                        if (selectedCategory != null) {
-                            selectedType = mapCategoryToTransactionType(selectedCategory!!.type)
-                        }
                     },
                     onError = { message ->
                         scanErrorMessage = message
@@ -423,19 +410,12 @@ fun AddTransactionDialog(
                 processImageForReceipt(
                     imageUri = uri,
                     context = context,
-                    viewModel = viewModel,
                     receiptScanRepository = receiptScanRepository,
                     onLoading = { isLoadingReceiptScan = it },
                     onSuccess = { parsedTransaction ->
                         description = parsedTransaction.description
                         amount = parsedTransaction.amount.toString()
                         selectedDate = parseTransactionDate(parsedTransaction.date)
-                        val matchedCategory = categoriesForDropdown.firstOrNull { it.desc.equals(parsedTransaction.category, ignoreCase = true) }
-                        selectedCategory = matchedCategory
-                        selectedCategoryId = matchedCategory?.id
-                        if (selectedCategory != null) {
-                            selectedType = mapCategoryToTransactionType(selectedCategory!!.type)
-                        }
                     },
                     onError = { message ->
                         scanErrorMessage = message

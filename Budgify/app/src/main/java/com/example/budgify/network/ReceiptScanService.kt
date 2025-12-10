@@ -1,11 +1,13 @@
 package com.example.budgify.network
 
-import com.example.budgify.data.ReceiptRequest
-import com.example.budgify.data.TransactionResponse
-import retrofit2.http.Body
+import com.example.budgify.data.ServerResponse
+import okhttp3.MultipartBody
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 
 interface ReceiptScanService {
-    @POST("scan_receipt") // Replace with your actual server endpoint
-    suspend fun scanReceipt(@Body request: ReceiptRequest): TransactionResponse
+    @Multipart
+    @POST("scan_receipt")
+    suspend fun scanReceipt(@Part image: MultipartBody.Part): ServerResponse
 }
