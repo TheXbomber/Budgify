@@ -13,4 +13,4 @@ Requirements:
 TODO:
 - [x] Adjust logout button
 - [ ] Refactor homepage
-- [ ] Show account in stats page
+- [x] Show account in stats page
