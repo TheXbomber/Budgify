@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
@@ -57,6 +59,8 @@ fun ObjectivesScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uiState by objectivesViewModel.uiState.collectAsStateWithLifecycle()
+    val user by authViewModel.user.collectAsStateWithLifecycle()
+    val accountName = user?.email ?: "Guest" // Get user email or "Guest"
 
     Scaffold(
         topBar = { TopBar(navController, currentRoute, authViewModel, isHomeScreen = false) },
@@ -71,7 +75,8 @@ fun ObjectivesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -102,14 +107,13 @@ fun ObjectivesScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
                 ProfileAndLevelSection(
                     profilePicture = rememberVectorPainter(Icons.Filled.Person),
                     currentLevel = uiState.currentLevel,
                     currentXp = uiState.currentXp,
                     xpForNextLevel = uiState.xpForNextLevel,
-                    progressToNextLevel = uiState.progressToNextLevel
+                    progressToNextLevel = uiState.progressToNextLevel,
+                    accountName = accountName
                 )
 
                 Spacer(modifier = Modifier.height(5.dp))
@@ -189,7 +193,8 @@ fun ProfileAndLevelSection(
     currentLevel: Int,
     currentXp: Int, // Add current XP
     xpForNextLevel: Int, // Add XP needed for next level
-    progressToNextLevel: Float
+    progressToNextLevel: Float,
+    accountName: String
 ) {
     Column(
         modifier = Modifier
@@ -204,6 +209,12 @@ fun ProfileAndLevelSection(
             text = "Your Stats",
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        //Spacer(modifier = Modifier.height(8.dp)) // Add space after "Your Stats"
+        Text(
+            text = accountName,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
         )
         Row(verticalAlignment = Alignment.CenterVertically) { // Align items in the row
             // Profile Picture
