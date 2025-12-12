@@ -79,7 +79,7 @@ import com.example.budgify.utils.securityQuestions
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
-const val DEV = true
+const val DEV = false
 
 enum class SettingsOptionType {
     NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD
