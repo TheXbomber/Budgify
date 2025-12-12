@@ -1,7 +1,7 @@
 Requirements:
 - [x] Use at least one public Cloud service (e.g., from https://publicapis.io/)
 - [x] Support multiple users with login and authentication
-- [ ] Include some 2D graphics
+- [x] Include some 2D graphics
 - [ ] Use at least one sensor
 - [ ] Use GPS
 - [x] Use the camera or perform image processing
@@ -13,3 +13,4 @@ Requirements:
 TODO:
 - [x] Adjust logout button
 - [ ] Refactor homepage
+- [ ] Show account in stats page
