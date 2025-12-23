@@ -40,6 +40,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -76,6 +77,8 @@ import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
 import com.example.budgify.utils.saveSecurityQuestionAnswer
 import com.example.budgify.utils.securityQuestions
+import com.example.budgify.utils.getBiometricEnabled
+import com.example.budgify.utils.saveBiometricEnabled
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -120,14 +123,14 @@ fun Settings(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 0.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 0.dp),
                 verticalArrangement = Arrangement.Top
             ) {
                 SettingsOption(
@@ -166,8 +169,7 @@ fun Settings(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .padding(top = 16.dp),
+                    .weight(1f),
                 contentAlignment = Alignment.TopCenter
             ) {
                 when (uiState.selectedOption) {
@@ -289,6 +291,7 @@ fun PinSettingsContent(
     val scope = rememberCoroutineScope()
     var isPinSet by remember { mutableStateOf(getSavedPinFromContext(context) != null) }
     var savedSecurityQA by remember { mutableStateOf(getSavedSecurityQuestionAnswer(context)) }
+    var isBiometricEnabled by remember { mutableStateOf(getBiometricEnabled(context)) } // Biometric state
 
     var selectedQuestionIndex by remember { mutableStateOf(savedSecurityQA?.questionIndex ?: 0) }
     var securityAnswerInput by remember { mutableStateOf(savedSecurityQA?.answer ?: "") }
@@ -434,6 +437,23 @@ fun PinSettingsContent(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+
+        // Biometric Toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Enable Fingerprint Unlock")
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(
+                checked = isBiometricEnabled,
+                onCheckedChange = {
+                    isBiometricEnabled = it
+                    saveBiometricEnabled(context, it)
+                    scope.launch { snackbarHostState.showSnackbar("Fingerprint unlock preference saved.") }
+                }
             )
         }
 
