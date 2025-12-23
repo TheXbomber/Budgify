@@ -123,14 +123,14 @@ fun Settings(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 0.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 0.dp),
                 verticalArrangement = Arrangement.Top
             ) {
                 SettingsOption(
@@ -169,8 +169,7 @@ fun Settings(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .padding(top = 16.dp),
+                    .weight(1f),
                 contentAlignment = Alignment.TopCenter
             ) {
                 when (uiState.selectedOption) {
