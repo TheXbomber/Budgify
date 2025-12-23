@@ -27,6 +27,7 @@ import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
 import com.example.budgify.utils.removePinFromContext
 import com.example.budgify.utils.securityQuestions
+import com.example.budgify.utils.getBiometricEnabled
 
 // Helper function to find a FragmentActivity in the context hierarchy
 private fun Context.findFragmentActivity(): FragmentActivity? {
@@ -60,7 +61,7 @@ fun PinScreen(
     Log.d("PinScreen", "BiometricManager.canAuthenticate result: $biometricAuthResult")
 
     val canAuthenticate = remember(fragmentActivity) {
-        fragmentActivity != null && biometricAuthResult == BiometricManager.BIOMETRIC_SUCCESS
+        getBiometricEnabled(context) && fragmentActivity != null && biometricAuthResult == BiometricManager.BIOMETRIC_SUCCESS
     }
     Log.d("PinScreen", "Can authenticate: $canAuthenticate")
 
@@ -132,6 +133,7 @@ fun PinScreen(
                 Text(it, color = MaterialTheme.colorScheme.error)
             }
             Spacer(modifier = Modifier.height(8.dp))
+
             if (canAuthenticate) {
                 TextButton(onClick = { biometricPrompt.authenticate(promptInfo) }) {
                     Text("Use Fingerprint")

@@ -23,39 +23,32 @@ fun hashPassword(password: String): String {
     return digest.fold("") { str, it -> str + "%02x".format(it) }
 }
 
-fun getSavedPinFromContext(context: Context): String? {
+private fun getEncryptedSharedPreferences(context: Context): EncryptedSharedPreferences? {
     return try {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        val sharedPreferences = EncryptedSharedPreferences.create(
+        EncryptedSharedPreferences.create(
             context,
             "AppSettings",
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-        sharedPreferences.getString("access_pin", null)
+        ) as EncryptedSharedPreferences // Explicitly cast the result
     } catch (e: Exception) {
-        Log.e("SecurityUtils", "Error reading PIN", e)
+        Log.e("SecurityUtils", "Error creating EncryptedSharedPreferences", e)
         null
     }
 }
 
+fun getSavedPinFromContext(context: Context): String? {
+    return getEncryptedSharedPreferences(context)?.getString("access_pin", null)
+}
+
 fun removePinFromContext(context: Context): Boolean {
     return try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        val sharedPreferences = EncryptedSharedPreferences.create(
-            context,
-            "AppSettings",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-        with(sharedPreferences.edit()) {
+        getEncryptedSharedPreferences(context)?.edit()?.apply {
             remove("access_pin")
             apply()
         }
@@ -68,45 +61,26 @@ fun removePinFromContext(context: Context): Boolean {
 
 fun getSavedSecurityQuestionAnswer(context: Context): SecurityQuestionAnswer? {
     try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        val sharedPreferences = getEncryptedSharedPreferences(context)
+        if (sharedPreferences != null) {
+            val questionIndex = sharedPreferences.getInt("security_question_index", -1)
+            val answer = sharedPreferences.getString("security_answer", null)
 
-        val sharedPreferences = EncryptedSharedPreferences.create(
-            context,
-            "AppSettings",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-        val questionIndex = sharedPreferences.getInt("security_question_index", -1)
-        val answer = sharedPreferences.getString("security_answer", null)
-
-        return if (questionIndex != -1 && answer != null) {
-            SecurityQuestionAnswer(questionIndex, answer)
-        } else {
-            null
+            return if (questionIndex != -1 && answer != null) {
+                SecurityQuestionAnswer(questionIndex, answer)
+            } else {
+                null
+            }
         }
     } catch (e: Exception) {
         Log.e("SecurityUtils", "Error retrieving saved security question/answer", e)
-        return null
     }
+    return null
 }
 
 fun saveSecurityQuestionAnswer(context: Context, questionIndex: Int, answer: String): Boolean {
     try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        val sharedPreferences = EncryptedSharedPreferences.create(
-            context,
-            "AppSettings",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-        with(sharedPreferences.edit()) {
+        getEncryptedSharedPreferences(context)?.edit()?.apply {
             putInt("security_question_index", questionIndex)
             putString("security_answer", answer)
             apply()
@@ -115,5 +89,27 @@ fun saveSecurityQuestionAnswer(context: Context, questionIndex: Int, answer: Str
     } catch (e: Exception) {
         Log.e("SecurityUtils", "Error saving security question/answer", e)
         return false
+    }
+}
+
+fun saveBiometricEnabled(context: Context, isEnabled: Boolean): Boolean {
+    return try {
+        getEncryptedSharedPreferences(context)?.edit()?.apply {
+            putBoolean("biometric_enabled", isEnabled)
+            apply()
+        }
+        true
+    } catch (e: Exception) {
+        Log.e("SecurityUtils", "Error saving biometric preference", e)
+        false
+    }
+}
+
+fun getBiometricEnabled(context: Context): Boolean {
+    return try {
+        getEncryptedSharedPreferences(context)?.getBoolean("biometric_enabled", true) ?: true
+    } catch (e: Exception) {
+        Log.e("SecurityUtils", "Error retrieving biometric preference", e)
+        true // Default to enabled if there's an error
     }
 }
