@@ -14,8 +14,9 @@ import androidx.compose.ui.Modifier
 import com.example.budgify.navigation.NavGraph
 import com.example.budgify.ui.theme.BudgifyTheme
 import com.example.budgify.userpreferences.ThemePreferenceManager
+import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
