@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.QuestionAnswer
+import androidx.compose.material.icons.filled.Settings // Import Settings icon
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -46,6 +47,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults // Import TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -92,6 +94,7 @@ enum class SettingsOptionType {
     NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD, BACKUP_RESTORE
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Settings(
     navController: NavController,
@@ -108,6 +111,20 @@ fun Settings(
     val user by authViewModel.user.collectAsStateWithLifecycle()
 
     var showRestartAppDialog by remember { mutableStateOf(false) }
+
+    // State for the dropdown menu
+    var expanded by remember { mutableStateOf(false) }
+    val selectedOptionTitle = remember(uiState.selectedOption) {
+        when (uiState.selectedOption) {
+            SettingsOptionType.NONE -> "Select an option..."
+            SettingsOptionType.PIN -> "Access Security"
+            SettingsOptionType.PASSWORD -> "Change Password"
+            SettingsOptionType.THEME -> "Theme"
+            SettingsOptionType.BACKUP_RESTORE -> "Backup & Restore"
+            SettingsOptionType.ABOUT -> "About the app"
+            SettingsOptionType.DEV_RESET -> "DEV: Reset Level & Unlocks"
+        }
+    }
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
@@ -141,55 +158,104 @@ fun Settings(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
+            // Dropdown Menu for Settings Options
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 0.dp),
-                verticalArrangement = Arrangement.Top
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                SettingsOption(
-                    icon = Icons.Default.Lock,
-                    title = "Access Security",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PIN) }
+                TextField(
+                    value = selectedOptionTitle,
+                    onValueChange = {},
+                    readOnly = true,
+                    // Removed label
+                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = "Settings") }, // Changed icon and content description
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        // Keeping cursor and text colors as default or adjust as needed
+                    ),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .height(56.dp), // Made the selection box larger (default height is 56.dp, so this ensures it is explicit)
+                    placeholder = { // Added placeholder for hint when nothing is selected
+                        if (uiState.selectedOption == SettingsOptionType.NONE) {
+                            Text("Select an option...")
+                        }
+                    }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.Lock, // Reusing Lock icon for password
-                    title = "Change Password",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PASSWORD) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.NightsStay,
-                    title = "Theme",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.THEME) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.CloudUpload,
-                    title = "Backup & Restore",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.BACKUP_RESTORE) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.Info,
-                    title = "About the app",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.ABOUT) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                if (DEV) {
-                    SettingsOption(
-                        icon = Icons.Filled.DeleteForever,
-                        title = "DEV: Reset Level & Unlocks",
-                        onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.DEV_RESET) }
+
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Access Security") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.PIN)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Change Password") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.PASSWORD)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Theme") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.THEME)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.NightsStay, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Backup & Restore") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.BACKUP_RESTORE)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("About the app") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.ABOUT)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
+                    )
+                    if (DEV) {
+                        DropdownMenuItem(
+                            text = { Text("DEV: Reset Level & Unlocks") },
+                            onClick = {
+                                settingsViewModel.onOptionSelected(SettingsOptionType.DEV_RESET)
+                                expanded = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.DeleteForever, contentDescription = null) }
+                        )
+                    }
                 }
             }
 
+            // Content display area (remains mostly the same)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 when (uiState.selectedOption) {
@@ -197,7 +263,7 @@ fun Settings(
                         Text(
                             "Select an option for more details",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            modifier = Modifier.align(Alignment.Center)
+                            modifier = Modifier.align(Alignment.Center) // Center the text within the box
                         )
                     }
                     SettingsOptionType.PIN -> {
@@ -303,6 +369,8 @@ fun ResetConfirmationDialog(
     )
 }
 
+// No longer needed as options are in dropdown
+/*
 @Composable
 fun SettingsOption(
     icon: ImageVector,
@@ -322,6 +390,7 @@ fun SettingsOption(
     }
     Divider()
 }
+*/
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -589,7 +658,7 @@ fun PinSettingsContent(
                                 onConfirmPinChange("")
                             } catch (e: Exception) {
                                 Log.e("PinSettingsContent", "Error saving PIN", e)
-                                errorMessage = "Error saving PIN."
+                                errorMessage = "Error removing PIN."
                                 pinSavedSuccessfully = false
                             }
                         }
