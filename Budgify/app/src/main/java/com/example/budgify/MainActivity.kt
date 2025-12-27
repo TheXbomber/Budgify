@@ -1,5 +1,6 @@
 package com.example.budgify
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,10 +37,22 @@ class MainActivity : AppCompatActivity() {
                         onThemeChange = { newTheme ->
                             themePreferenceManager.saveTheme(newTheme)
                             currentTheme = newTheme
-                        }
+                        },
+                        onRestartApp = { restartApplication() } // Pass the restart function
                     )
                 }
             }
         }
+    }
+
+    private fun restartApplication() {
+        val packageManager = applicationContext.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
+        val componentName = intent?.component
+        // The `Intent.makeRestartActivityTask` is deprecated, use `Intent.FLAG_ACTIVITY_CLEAR_TASK` and `Intent.FLAG_ACTIVITY_NEW_TASK` instead
+        val mainIntent = Intent.makeRestartActivityTask(componentName)
+        mainIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+        applicationContext.startActivity(mainIntent)
+        Runtime.getRuntime().exit(0) // Terminate the current process
     }
 }

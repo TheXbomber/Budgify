@@ -1,8 +1,13 @@
 package com.example.budgify.viewmodel
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel // Use AndroidViewModel to get applicationContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.budgify.applicationlogic.FinanceApplication
+import com.example.budgify.applicationlogic.FinanceRepository
 import com.example.budgify.applicationlogic.FinanceViewModel
+import com.example.budgify.auth.AuthService
 import com.example.budgify.screen.SettingsOptionType
 import com.example.budgify.userpreferences.AppTheme
 import com.example.budgify.userpreferences.ThemePreferenceManager
@@ -13,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth // Import for FirebaseAuth check
 
 data class SettingsUiState(
     val selectedOption: SettingsOptionType = SettingsOptionType.NONE,
@@ -34,16 +40,22 @@ data class SettingsUiState(
     val confirmNewPassword: String = "",
     val currentPasswordVisible: Boolean = false,
     val newPasswordVisible: Boolean = false,
-    val confirmNewPasswordVisible: Boolean = false
+    val confirmNewPasswordVisible: Boolean = false,
+    val isBackupInProgress: Boolean = false, // New state for UI feedback
+    val isRestoreInProgress: Boolean = false // New state for UI feedback
 )
 
 class SettingsViewModel(
+    application: Application, // Change to Application
     private val financeViewModel: FinanceViewModel,
-    private val themePreferenceManager: ThemePreferenceManager
-) : ViewModel() {
+    private val themePreferenceManager: ThemePreferenceManager,
+    private val financeRepository: FinanceRepository // Inject FinanceRepository
+) : AndroidViewModel(application) { // Extend AndroidViewModel
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
 
     init {
         viewModelScope.launch {
@@ -131,4 +143,43 @@ class SettingsViewModel(
         _uiState.update { it.copy(confirmNewPasswordVisible = !it.confirmNewPasswordVisible) }
     }
 
+    // New backup function
+    fun backupData(onComplete: (Boolean) -> Unit) {
+        if (auth.currentUser == null) {
+            _uiState.update { it.copy(snackbarMessage = "Please log in to backup your data.") }
+            onComplete(false)
+            return
+        }
+        _uiState.update { it.copy(isBackupInProgress = true) }
+        viewModelScope.launch {
+            val success = financeRepository.backupDatabase()
+            _uiState.update {
+                it.copy(
+                    isBackupInProgress = false,
+                    snackbarMessage = if (success) "Backup successful!" else "Backup failed."
+                )
+            }
+            onComplete(success)
+        }
+    }
+
+    // New restore function
+    fun restoreData(onComplete: (Boolean) -> Unit) {
+        if (auth.currentUser == null) {
+            _uiState.update { it.copy(snackbarMessage = "Please log in to restore your data.") }
+            onComplete(false)
+            return
+        }
+        _uiState.update { it.copy(isRestoreInProgress = true) }
+        viewModelScope.launch {
+            val success = financeRepository.restoreDatabase()
+            _uiState.update {
+                it.copy(
+                    isRestoreInProgress = false,
+                    snackbarMessage = if (success) "Restore successful!" else "Restore failed."
+                )
+            }
+            onComplete(success)
+        }
+    }
 }

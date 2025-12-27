@@ -18,6 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,7 +88,7 @@ import kotlinx.coroutines.launch
 const val DEV = false
 
 enum class SettingsOptionType {
-    NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD
+    NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD, BACKUP_RESTORE
 }
 
 @Composable
@@ -94,7 +97,8 @@ fun Settings(
     viewModel: FinanceViewModel,
     settingsViewModel: SettingsViewModel,
     onThemeChange: (AppTheme) -> Unit,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    onRestartApp: () -> Unit // Added callback for app restart
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Settings.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -102,10 +106,19 @@ fun Settings(
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val user by authViewModel.user.collectAsStateWithLifecycle()
 
+    var showRestartAppDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
             settingsViewModel.onSnackbarMessageShown()
+        }
+    }
+
+    // Handle showing restart dialog if restore was successful
+    LaunchedEffect(uiState.snackbarMessage) {
+        if (uiState.snackbarMessage == "Restore successful!") {
+            showRestartAppDialog = true
         }
     }
 
@@ -149,6 +162,12 @@ fun Settings(
                     icon = Icons.Default.NightsStay,
                     title = "Theme",
                     onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.THEME) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsOption(
+                    icon = Icons.Default.CloudUpload,
+                    title = "Backup & Restore",
+                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.BACKUP_RESTORE) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingsOption(
@@ -216,6 +235,12 @@ fun Settings(
                             snackbarHostState = snackbarHostState
                         )
                     }
+                    SettingsOptionType.BACKUP_RESTORE -> {
+                        BackupRestoreContent(
+                            settingsViewModel = settingsViewModel,
+                            onRestartApp = onRestartApp
+                        )
+                    }
                 }
             }
 
@@ -226,6 +251,27 @@ fun Settings(
             ResetConfirmationDialog(
                 onConfirm = { settingsViewModel.onResetDialogConfirm() },
                 onDismiss = { settingsViewModel.onResetDialogDismiss() }
+            )
+        }
+
+        if (showRestartAppDialog) {
+            AlertDialog(
+                onDismissRequest = { showRestartAppDialog = false },
+                title = { Text("Restart App Required") },
+                text = { Text("Database restored successfully. Please restart the app for changes to take full effect.") },
+                confirmButton = {
+                    Button(onClick = {
+                        showRestartAppDialog = false
+                        onRestartApp()
+                    }) {
+                        Text("Restart Now")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showRestartAppDialog = false }) {
+                        Text("Later")
+                    }
+                }
             )
         }
     }
@@ -822,14 +868,10 @@ fun ChangePasswordContent(
                     return@Button
                 }
 
-                // Here you would call authViewModel to change the password
-                // e.g., authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
-                // The AuthViewModel should handle the actual logic and update snackbarHostState on success/failure.
                 scope.launch {
                     val success = authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
                     if (success) {
                         snackbarHostState.showSnackbar("Password changed successfully!")
-                        // Clear password fields on success
                         onCurrentPasswordChange("")
                         onNewPasswordChange("")
                         onConfirmNewPasswordChange("")
@@ -843,5 +885,73 @@ fun ChangePasswordContent(
         ) {
             Text("Save New Password")
         }
+    }
+}
+
+@Composable
+fun BackupRestoreContent(
+    settingsViewModel: SettingsViewModel,
+    onRestartApp: () -> Unit // Callback to restart the app
+) {
+    val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            "Cloud Backup & Restore",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            "Ensure you are logged in to your account before backing up or restoring data.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = { settingsViewModel.backupData { /* handled by snackbar in ViewModel */ } },
+            enabled = !uiState.isBackupInProgress,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (uiState.isBackupInProgress) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Backing up...")
+            } else {
+                Icon(Icons.Default.CloudUpload, contentDescription = "Backup")
+                Spacer(Modifier.width(8.dp))
+                Text("Backup to Cloud")
+            }
+        }
+
+        Text("Backup will overwrite any previous cloud backup.", style = MaterialTheme.typography.bodySmall)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = { settingsViewModel.restoreData { /* handled by snackbar/dialog in Settings */ } },
+            enabled = !uiState.isRestoreInProgress,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (uiState.isRestoreInProgress) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Restoring...")
+            } else {
+                Icon(Icons.Default.CloudDownload, contentDescription = "Restore")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Restore from Cloud")
+            }
+        }
+        Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
     }
 }

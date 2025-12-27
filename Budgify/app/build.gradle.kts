@@ -2,8 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // Aggiungi questa riga per il plugin KAPT
     id("org.jetbrains.kotlin.kapt")
+    id("com.google.gms.google-services") // Add this line
 }
 
 android {
@@ -62,16 +62,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.runtime)
     annotationProcessor("androidx.room:room-compiler:2.7.1") // For Java users
-    // Per utenti Kotlin con KAPT
     kapt("androidx.room:room-compiler:2.7.1")
-    // Moshi annotation processor
     kapt("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
-    // Moshi Kotlin runtime
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
-    // Per utenti Kotlin con KSP
-    //ksp("androidx.room:room-compiler:$room_version")
-
-    // Optional: support for Kotlin Coroutines and Flow
     implementation("androidx.room:room-ktx:2.7.1")
 
     implementation("androidx.security:security-crypto:1.1.0-alpha07")
@@ -89,6 +82,10 @@ dependencies {
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.12.0") // Added Material Components
+
+    // Firebase dependencies for Storage and Auth
+    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
+    implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

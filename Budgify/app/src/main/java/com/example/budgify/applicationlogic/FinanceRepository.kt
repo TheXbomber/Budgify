@@ -1,5 +1,6 @@
 package com.example.budgify.applicationlogic
 
+import android.content.Context
 import android.util.Log
 import com.example.budgify.dataaccessobjects.AccountDao
 import com.example.budgify.dataaccessobjects.CategoryDao
@@ -16,6 +17,10 @@ import com.example.budgify.entities.TransactionType
 import com.example.budgify.entities.TransactionWithDetails
 import com.example.budgify.entities.User
 import kotlinx.coroutines.flow.Flow
+import com.google.firebase.auth.FirebaseAuth // Import for Firebase Auth
+import com.google.firebase.storage.FirebaseStorage // Import for Firebase Storage
+import java.io.File
+import kotlinx.coroutines.tasks.await // For await() on Tasks
 
 class FinanceRepository(
     private val transactionDao: TransactionDao,
@@ -24,8 +29,12 @@ class FinanceRepository(
     private val categoryDao: CategoryDao,
     private val loanDao: LoanDao,
     private val userDao: UserDao,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val applicationContext: Context // Add Context to the constructor
 ) {
+    private val DATABASE_NAME = "finance_database"
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val storage: FirebaseStorage by lazy { FirebaseStorage.getInstance() }
 
     // USER
     suspend fun insertUser(user: User) {
@@ -33,9 +42,6 @@ class FinanceRepository(
     }
 
     // TRANSACTIONS
-//    fun getAllTransactions(userId: String): Flow<List<MyTransaction>> {
-//        return transactionDao.getAllTransactions(userId)
-//    }
     fun getAllTransactionsWithDetails(userId: String): Flow<List<TransactionWithDetails>> {
         return transactionDao.getAllTransactionsWithDetails(userId)
     }
@@ -45,9 +51,7 @@ class FinanceRepository(
         transactionDao.insert(myTransaction)
     }
     suspend fun updateTransaction(myTransaction: MyTransaction) {
-        //Log.d("FinanceRepository", "Updating transaction: $myTransaction")
         transactionDao.update(myTransaction)
-        //Log.d("FinanceRepository", "Updated transaction: $myTransaction")
     }
     suspend fun deleteTransaction(myTransaction: MyTransaction) {
         transactionDao.delete(myTransaction)
@@ -92,7 +96,7 @@ class FinanceRepository(
         return categoryDao.getCategoryById(id)
     }
     suspend fun getCategoryByIdNonFlow(id: Int): Category? {
-        return categoryDao.getCategoryByIdNonFlow(id) // Calls the new suspend fun in DAO
+        return categoryDao.getCategoryByIdNonFlow(id)
     }
     suspend fun deleteCategory(category: Category) {
         categoryDao.delete(category)
@@ -112,7 +116,6 @@ class FinanceRepository(
     suspend fun insertAccount(account: Account) {
         accountDao.insert(account)
     }
-    // Inside your FinanceRepository class
     suspend fun getAccountById(accountId: Int): Account? = accountDao.getAccountById(accountId)
     suspend fun getTransactionsForAccount(accountId: Int, userId: String): List<MyTransaction> {
         return transactionDao.getTransactionsForAccount(accountId, userId)
@@ -125,20 +128,16 @@ class FinanceRepository(
     }
 
     suspend fun updateAccountBalance(accountId: Int) {
-        // Get the account from the database
         val account = accountDao.getAccountById(accountId)
 
         if (account != null) {
-            // Get all transactions for this account
             val transactionsForAccount = transactionDao.getTransactionsForAccount(accountId, account.userId)
             Log.d("FinanceRepository", "Transactions for account $accountId: $transactionsForAccount")
-            // Calculate the new balance
             var newBalance = 0.0
             transactionsForAccount.forEach { transaction ->
                 newBalance += if (transaction.type == TransactionType.INCOME) transaction.amount else -transaction.amount
             }
 
-            // Update the account's amount in the database
             val updatedAccount = account.copy(amount = account.initialAmount + newBalance)
             accountDao.update(updatedAccount)
         }
@@ -168,11 +167,104 @@ class FinanceRepository(
         userPreferencesRepository.addUnlockedTheme(themeName)
     }
 
-    suspend fun resetUserLevelAndXp() { // Expose level/XP reset
+    suspend fun resetUserLevelAndXp() {
         userPreferencesRepository.resetUserLevelAndXpToDefault()
     }
 
-    suspend fun resetUnlockedThemes() { // Expose theme reset
+    suspend fun resetUnlockedThemes() {
         userPreferencesRepository.resetUnlockedThemesToDefault()
+    }
+
+    /**
+     * Backs up the local Room database files to Firebase Cloud Storage.
+     * The database files are stored under the authenticated user's ID.
+     * @return true if backup is successful, false otherwise.
+     */
+    suspend fun backupDatabase(): Boolean {
+        val userId = auth.currentUser?.uid ?: run {
+            Log.e("FinanceRepository", "User not authenticated for backup.")
+            return false
+        }
+
+        val dbPath = applicationContext.getDatabasePath(DATABASE_NAME)
+        val dbFiles = listOf(
+            dbPath,
+            File(dbPath.path + "-shm"),
+            File(dbPath.path + "-wal")
+        ).filter { it.exists() }
+
+        if (dbFiles.isEmpty()) {
+            Log.e("FinanceRepository", "No database files found to backup.")
+            return false
+        }
+
+        return try {
+            dbFiles.forEach { file ->
+                val storageRef = storage.reference.child("backups/$userId/${file.name}")
+                storageRef.putFile(android.net.Uri.fromFile(file)).await()
+                Log.d("FinanceRepository", "Backed up ${file.name} successfully.")
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("FinanceRepository", "Error during database backup: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Restores the database files from Firebase Cloud Storage to the local device.
+     * This operation will overwrite the existing local database files.
+     * The app should ideally be restarted after a restore for changes to take effect reliably.
+     * @return true if restore is successful, false otherwise.
+     */
+    suspend fun restoreDatabase(): Boolean {
+        val userId = auth.currentUser?.uid ?: run {
+            Log.e("FinanceRepository", "User not authenticated for restore.")
+            return false
+        }
+
+        val dbPath = applicationContext.getDatabasePath(DATABASE_NAME)
+        val parentDir = dbPath.parentFile ?: run {
+            Log.e("FinanceRepository", "Could not get database parent directory.")
+            return false
+        }
+
+        // Ensure the directory exists
+        if (!parentDir.exists()) {
+            parentDir.mkdirs()
+        }
+
+        // List of files to restore (main db, shm, wal)
+        val dbFileNames = listOf(
+            DATABASE_NAME,
+            "$DATABASE_NAME-shm",
+            "$DATABASE_NAME-wal"
+        )
+
+        return try {
+            dbFileNames.forEach { fileName ->
+                val localFile = File(parentDir, fileName)
+                val storageRef = storage.reference.child("backups/$userId/$fileName")
+
+                // Delete existing local file before downloading
+                if (localFile.exists()) {
+                    localFile.delete()
+                }
+
+                storageRef.getFile(localFile).await()
+                Log.d("FinanceRepository", "Restored $fileName successfully to ${localFile.absolutePath}.")
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("FinanceRepository", "Error during database restore: ${e.message}", e)
+            // Clean up potentially partially restored files in case of error
+            dbFileNames.forEach { fileName ->
+                val localFile = File(parentDir, fileName)
+                if (localFile.exists()) {
+                    localFile.delete()
+                }
+            }
+            false
+        }
     }
 }

@@ -28,7 +28,8 @@ class FinanceApplication : Application() {
             database.categoryDao(),
             database.loanDao(),
             database.userDao(),
-            userPreferencesRepository = userPreferencesRepository
+            userPreferencesRepository = userPreferencesRepository,
+            applicationContext = applicationContext // Add this line
         )
     }
 
