@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,10 +79,10 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.userpreferences.AppTheme
 import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
+import com.example.budgify.utils.saveBiometricEnabled
 import com.example.budgify.utils.saveSecurityQuestionAnswer
 import com.example.budgify.utils.securityQuestions
 import com.example.budgify.utils.getBiometricEnabled
-import com.example.budgify.utils.saveBiometricEnabled
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -482,7 +483,7 @@ fun PinSettingsContent(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
 
@@ -751,7 +752,7 @@ fun AboutSettingsContent() {
         Text(
             "Your personal finance manager",
             style = MaterialTheme.typography.bodyMedium,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center
         )
         Text("Version: 1.1.0", style = MaterialTheme.typography.bodyLarge)
         Text("Developers:", style = MaterialTheme.typography.bodyLarge)
@@ -852,7 +853,7 @@ fun ChangePasswordContent(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
 
@@ -914,12 +915,12 @@ fun BackupRestoreContent(
             "Ensure you are logged in to your account before backing up or restoring data.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
-            onClick = { settingsViewModel.backupData { /* handled by snackbar in ViewModel */ } },
+            onClick = { settingsViewModel.onShowBackupConfirmation() }, // Trigger confirmation
             enabled = !uiState.isBackupInProgress,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -938,7 +939,7 @@ fun BackupRestoreContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { settingsViewModel.restoreData { /* handled by snackbar/dialog in Settings */ } },
+            onClick = { settingsViewModel.onShowRestoreConfirmation() }, // Trigger confirmation
             enabled = !uiState.isRestoreInProgress,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -953,5 +954,49 @@ fun BackupRestoreContent(
             }
         }
         Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
+    }
+
+    // Backup Confirmation Dialog
+    if (uiState.showBackupConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.onDismissBackupConfirmation() },
+            title = { Text("Confirm Backup") },
+            text = { Text("Are you sure you want to back up your data? This will overwrite any existing cloud backup.") },
+            confirmButton = {
+                Button(onClick = {
+                    settingsViewModel.confirmBackupData { /* snackbar handled in ViewModel */ }
+                }) {
+                    Text("Backup")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { settingsViewModel.onDismissBackupConfirmation() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Restore Confirmation Dialog
+    if (uiState.showRestoreConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.onDismissRestoreConfirmation() },
+            title = { Text("Confirm Restore") },
+            text = { Text("Are you sure you want to restore your data? This will overwrite all your current local app data with the cloud backup. This action cannot be undone.") },
+            confirmButton = {
+                Button(onClick = {
+                    settingsViewModel.confirmRestoreData { /* snackbar/restart dialog handled in Settings */ }
+                },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { settingsViewModel.onDismissRestoreConfirmation() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
