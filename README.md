@@ -10,7 +10,4 @@ Requirements:
 - [x] Implement a REST API running on a remote server (e.g., PythonAnywhere, Docker on a VM)
 - [x] Implement a storage service (e.g., a simple SQL database accessed via the REST API)
 
-TODO:
-- [x] Adjust logout button
-- [ ] Refactor homepage
-- [x] Show account in stats page
+[PRESENTATION](https://docs.google.com/presentation/d/1zo2hQg80Z_nLtlvYlUPpzLFJasvJYWQaI0cbydg43BA/edit?usp=sharing)
