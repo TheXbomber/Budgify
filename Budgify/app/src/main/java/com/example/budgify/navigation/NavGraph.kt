@@ -40,6 +40,7 @@ import com.example.budgify.viewmodel.*
 fun NavGraph(
     themePreferenceManager: ThemePreferenceManager,
     onThemeChange: (AppTheme) -> Unit,
+    onRestartApp: () -> Unit, // Added onRestartApp parameter
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
@@ -126,37 +127,37 @@ fun NavGraph(
             )
         }
         composable(ScreenRoutes.Categories.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val categoriesViewModel: CategoriesViewModel = viewModel(factory = factory)
             CategoriesScreen(navController, financeViewModel, categoriesViewModel, authViewModel)
         }
         composable(ScreenRoutes.Home.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val homepageViewModel: HomepageViewModel = viewModel(factory = factory)
             Homepage(navController, financeViewModel, homepageViewModel, authViewModel)
         }
         composable(ScreenRoutes.Objectives.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val objectivesViewModel: ObjectivesViewModel = viewModel(factory = factory)
             ObjectivesScreen(navController, financeViewModel, objectivesViewModel, authViewModel)
         }
         composable(ScreenRoutes.ObjectivesManagement.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val objectivesManagementViewModel: ObjectivesManagementViewModel = viewModel(factory = factory)
             ObjectivesManagementScreen(navController, financeViewModel, objectivesManagementViewModel, authViewModel)
         }
         composable(ScreenRoutes.Settings.route) {
-            val factory = ViewModelFactory(financeViewModel, themePreferenceManager)
+            val factory = ViewModelFactory(application, financeViewModel, themePreferenceManager)
             val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
-            Settings(navController, financeViewModel, settingsViewModel, onThemeChange, authViewModel)
+            Settings(navController, financeViewModel, settingsViewModel, onThemeChange, authViewModel, onRestartApp) // Passed onRestartApp
         }
         composable(ScreenRoutes.Transactions.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val transactionsViewModel: TransactionsViewModel = viewModel(factory = factory)
             TransactionsScreen(navController, financeViewModel, transactionsViewModel, authViewModel)
         }
         composable(ScreenRoutes.CredDeb.route) {
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val creditsDebitsViewModel: CreditsDebitsViewModel = viewModel(factory = factory)
             CreditsDebtsScreen(navController, financeViewModel, creditsDebitsViewModel, authViewModel)
         }
@@ -177,7 +178,7 @@ fun NavGraph(
                 Log.e("NavGraph", "Invalid LoanType argument: $initialLoanTypeName", e)
                 null
             }
-            val factory = ViewModelFactory(financeViewModel)
+            val factory = ViewModelFactory(application, financeViewModel)
             val credDebManagementViewModel: CredDebManagementViewModel = viewModel(factory = factory)
             CredDebManagementScreen(
                 navController = navController,

@@ -1,7 +1,9 @@
 package com.example.budgify.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.budgify.applicationlogic.FinanceRepository
 import com.example.budgify.applicationlogic.FinanceViewModel
 import com.example.budgify.screen.SettingsOptionType
 import com.example.budgify.userpreferences.AppTheme
@@ -10,9 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.flow.map
 
 data class SettingsUiState(
     val selectedOption: SettingsOptionType = SettingsOptionType.NONE,
@@ -34,29 +37,31 @@ data class SettingsUiState(
     val confirmNewPassword: String = "",
     val currentPasswordVisible: Boolean = false,
     val newPasswordVisible: Boolean = false,
-    val confirmNewPasswordVisible: Boolean = false
+    val confirmNewPasswordVisible: Boolean = false,
+    val isBackupInProgress: Boolean = false,
+    val isRestoreInProgress: Boolean = false,
+    val showBackupConfirmationDialog: Boolean = false, // New for backup confirmation
+    val showRestoreConfirmationDialog: Boolean = false // New for restore confirmation
 )
 
 class SettingsViewModel(
+    application: Application,
     private val financeViewModel: FinanceViewModel,
-    private val themePreferenceManager: ThemePreferenceManager
-) : ViewModel() {
+    private val themePreferenceManager: ThemePreferenceManager,
+    private val financeRepository: FinanceRepository
+) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(
+        SettingsUiState(currentTheme = themePreferenceManager.getSavedTheme())
+    )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
 
     init {
         viewModelScope.launch {
-            combine(
-                financeViewModel.unlockedThemeNames,
-                _uiState
-            ) { unlockedThemes, currentState ->
-                currentState.copy(
-                    unlockedThemeNames = unlockedThemes,
-                    currentTheme = themePreferenceManager.getSavedTheme()
-                )
-            }.stateIn(viewModelScope).collect {
-                _uiState.value = it
+            financeViewModel.unlockedThemeNames.collect { unlockedThemes ->
+                _uiState.update { it.copy(unlockedThemeNames = unlockedThemes) }
             }
         }
     }
@@ -131,4 +136,59 @@ class SettingsViewModel(
         _uiState.update { it.copy(confirmNewPasswordVisible = !it.confirmNewPasswordVisible) }
     }
 
+    // Backup confirmation dialog actions
+    fun onShowBackupConfirmation() {
+        if (auth.currentUser == null) {
+            _uiState.update { it.copy(snackbarMessage = "Please log in to backup your data.") }
+            return
+        }
+        _uiState.update { it.copy(showBackupConfirmationDialog = true) }
+    }
+
+    fun onDismissBackupConfirmation() {
+        _uiState.update { it.copy(showBackupConfirmationDialog = false) }
+    }
+
+    // Actual backup data call after confirmation
+    fun confirmBackupData(onComplete: (Boolean) -> Unit) {
+        _uiState.update { it.copy(showBackupConfirmationDialog = false, isBackupInProgress = true) }
+        viewModelScope.launch {
+            val success = financeRepository.backupDatabase()
+            _uiState.update {
+                it.copy(
+                    isBackupInProgress = false,
+                    snackbarMessage = if (success) "Backup successful!" else "Backup failed."
+                )
+            }
+            onComplete(success)
+        }
+    }
+
+    // Restore confirmation dialog actions
+    fun onShowRestoreConfirmation() {
+        if (auth.currentUser == null) {
+            _uiState.update { it.copy(snackbarMessage = "Please log in to restore your data.") }
+            return
+        }
+        _uiState.update { it.copy(showRestoreConfirmationDialog = true) }
+    }
+
+    fun onDismissRestoreConfirmation() {
+        _uiState.update { it.copy(showRestoreConfirmationDialog = false) }
+    }
+
+    // Actual restore data call after confirmation
+    fun confirmRestoreData(onComplete: (Boolean) -> Unit) {
+        _uiState.update { it.copy(showRestoreConfirmationDialog = false, isRestoreInProgress = true) }
+        viewModelScope.launch {
+            val success = financeRepository.restoreDatabase()
+            _uiState.update {
+                it.copy(
+                    isRestoreInProgress = false,
+                    snackbarMessage = if (success) "Restore successful!" else "Restore failed."
+                )
+            }
+            onComplete(success)
+        }
+    }
 }

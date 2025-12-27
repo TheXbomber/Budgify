@@ -18,16 +18,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.QuestionAnswer
+import androidx.compose.material.icons.filled.Settings // Import Settings icon
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +47,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults // Import TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,26 +81,28 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.userpreferences.AppTheme
 import com.example.budgify.utils.getSavedPinFromContext
 import com.example.budgify.utils.getSavedSecurityQuestionAnswer
+import com.example.budgify.utils.saveBiometricEnabled
 import com.example.budgify.utils.saveSecurityQuestionAnswer
 import com.example.budgify.utils.securityQuestions
 import com.example.budgify.utils.getBiometricEnabled
-import com.example.budgify.utils.saveBiometricEnabled
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
 const val DEV = false
 
 enum class SettingsOptionType {
-    NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD
+    NONE, PIN, THEME, ABOUT, DEV_RESET, PASSWORD, BACKUP_RESTORE
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Settings(
     navController: NavController,
     viewModel: FinanceViewModel,
     settingsViewModel: SettingsViewModel,
     onThemeChange: (AppTheme) -> Unit,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    onRestartApp: () -> Unit // Added callback for app restart
 ) {
     val currentRoute by remember { mutableStateOf(ScreenRoutes.Settings.route) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -102,10 +110,33 @@ fun Settings(
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val user by authViewModel.user.collectAsStateWithLifecycle()
 
+    var showRestartAppDialog by remember { mutableStateOf(false) }
+
+    // State for the dropdown menu
+    var expanded by remember { mutableStateOf(false) }
+    val selectedOptionTitle = remember(uiState.selectedOption) {
+        when (uiState.selectedOption) {
+            SettingsOptionType.NONE -> "Select an option..."
+            SettingsOptionType.PIN -> "Access Security"
+            SettingsOptionType.PASSWORD -> "Change Password"
+            SettingsOptionType.THEME -> "Theme"
+            SettingsOptionType.BACKUP_RESTORE -> "Backup & Restore"
+            SettingsOptionType.ABOUT -> "About the app"
+            SettingsOptionType.DEV_RESET -> "DEV: Reset Level & Unlocks"
+        }
+    }
+
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
             snackbarHostState.showSnackbar(it)
             settingsViewModel.onSnackbarMessageShown()
+        }
+    }
+
+    // Handle showing restart dialog if restore was successful
+    LaunchedEffect(uiState.snackbarMessage) {
+        if (uiState.snackbarMessage == "Restore successful!") {
+            showRestartAppDialog = true
         }
     }
 
@@ -127,49 +158,104 @@ fun Settings(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
+            // Dropdown Menu for Settings Options
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 0.dp),
-                verticalArrangement = Arrangement.Top
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                SettingsOption(
-                    icon = Icons.Default.Lock,
-                    title = "Access PIN & Security Question",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PIN) }
+                TextField(
+                    value = selectedOptionTitle,
+                    onValueChange = {},
+                    readOnly = true,
+                    // Removed label
+                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = "Settings") }, // Changed icon and content description
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        // Keeping cursor and text colors as default or adjust as needed
+                    ),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .height(56.dp), // Made the selection box larger (default height is 56.dp, so this ensures it is explicit)
+                    placeholder = { // Added placeholder for hint when nothing is selected
+                        if (uiState.selectedOption == SettingsOptionType.NONE) {
+                            Text("Select an option...")
+                        }
+                    }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.Lock, // Reusing Lock icon for password
-                    title = "Change Password",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PASSWORD) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.NightsStay,
-                    title = "Theme",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.THEME) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SettingsOption(
-                    icon = Icons.Default.Info,
-                    title = "About the app",
-                    onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.ABOUT) }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                if (DEV) {
-                    SettingsOption(
-                        icon = Icons.Filled.DeleteForever,
-                        title = "DEV: Reset Level & Unlocks",
-                        onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.DEV_RESET) }
+
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Access Security") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.PIN)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
                     )
+                    DropdownMenuItem(
+                        text = { Text("Change Password") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.PASSWORD)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Theme") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.THEME)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.NightsStay, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Backup & Restore") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.BACKUP_RESTORE)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("About the app") },
+                        onClick = {
+                            settingsViewModel.onOptionSelected(SettingsOptionType.ABOUT)
+                            expanded = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) }
+                    )
+                    if (DEV) {
+                        DropdownMenuItem(
+                            text = { Text("DEV: Reset Level & Unlocks") },
+                            onClick = {
+                                settingsViewModel.onOptionSelected(SettingsOptionType.DEV_RESET)
+                                expanded = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.DeleteForever, contentDescription = null) }
+                        )
+                    }
                 }
             }
 
+            // Content display area (remains mostly the same)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 when (uiState.selectedOption) {
@@ -177,7 +263,7 @@ fun Settings(
                         Text(
                             "Select an option for more details",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            modifier = Modifier.align(Alignment.Center)
+                            modifier = Modifier.align(Alignment.Center) // Center the text within the box
                         )
                     }
                     SettingsOptionType.PIN -> {
@@ -216,6 +302,12 @@ fun Settings(
                             snackbarHostState = snackbarHostState
                         )
                     }
+                    SettingsOptionType.BACKUP_RESTORE -> {
+                        BackupRestoreContent(
+                            settingsViewModel = settingsViewModel,
+                            onRestartApp = onRestartApp
+                        )
+                    }
                 }
             }
 
@@ -226,6 +318,27 @@ fun Settings(
             ResetConfirmationDialog(
                 onConfirm = { settingsViewModel.onResetDialogConfirm() },
                 onDismiss = { settingsViewModel.onResetDialogDismiss() }
+            )
+        }
+
+        if (showRestartAppDialog) {
+            AlertDialog(
+                onDismissRequest = { showRestartAppDialog = false },
+                title = { Text("Restart App Required") },
+                text = { Text("Database restored successfully. Please restart the app for changes to take full effect.") },
+                confirmButton = {
+                    Button(onClick = {
+                        showRestartAppDialog = false
+                        onRestartApp()
+                    }) {
+                        Text("Restart Now")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showRestartAppDialog = false }) {
+                        Text("Later")
+                    }
+                }
             )
         }
     }
@@ -256,6 +369,8 @@ fun ResetConfirmationDialog(
     )
 }
 
+// No longer needed as options are in dropdown
+/*
 @Composable
 fun SettingsOption(
     icon: ImageVector,
@@ -275,6 +390,7 @@ fun SettingsOption(
     }
     Divider()
 }
+*/
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -328,7 +444,7 @@ fun PinSettingsContent(
     ) {
         Text(
             when {
-                isPinSet && isSecurityQASet.value -> "Manage PIN & Security Question"
+                isPinSet && isSecurityQASet.value -> "Manage Access Security Methods"
                 isPinSet -> "Set Security Question & Manage PIN"
                 isSecurityQASet.value -> "Set PIN & Manage Security Question"
                 else -> "Set PIN & Security Question"
@@ -436,7 +552,7 @@ fun PinSettingsContent(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
 
@@ -542,7 +658,7 @@ fun PinSettingsContent(
                                 onConfirmPinChange("")
                             } catch (e: Exception) {
                                 Log.e("PinSettingsContent", "Error saving PIN", e)
-                                errorMessage = "Error saving PIN."
+                                errorMessage = "Error removing PIN."
                                 pinSavedSuccessfully = false
                             }
                         }
@@ -705,7 +821,7 @@ fun AboutSettingsContent() {
         Text(
             "Your personal finance manager",
             style = MaterialTheme.typography.bodyMedium,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            textAlign = TextAlign.Center
         )
         Text("Version: 1.1.0", style = MaterialTheme.typography.bodyLarge)
         Text("Developers:", style = MaterialTheme.typography.bodyLarge)
@@ -806,7 +922,7 @@ fun ChangePasswordContent(
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = TextAlign.Center
             )
         }
 
@@ -822,14 +938,10 @@ fun ChangePasswordContent(
                     return@Button
                 }
 
-                // Here you would call authViewModel to change the password
-                // e.g., authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
-                // The AuthViewModel should handle the actual logic and update snackbarHostState on success/failure.
                 scope.launch {
                     val success = authViewModel.changePassword(uiState.currentPassword, uiState.newPassword)
                     if (success) {
                         snackbarHostState.showSnackbar("Password changed successfully!")
-                        // Clear password fields on success
                         onCurrentPasswordChange("")
                         onNewPasswordChange("")
                         onConfirmNewPasswordChange("")
@@ -843,5 +955,115 @@ fun ChangePasswordContent(
         ) {
             Text("Save New Password")
         }
+    }
+}
+
+@Composable
+fun BackupRestoreContent(
+    settingsViewModel: SettingsViewModel,
+    onRestartApp: () -> Unit // Callback to restart the app
+) {
+    val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Text(
+            "Cloud Backup & Restore",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+
+        Text(
+            "Ensure you are logged in to your account before backing up or restoring data.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center
+        )
+
+        Button(
+            onClick = { settingsViewModel.onShowBackupConfirmation() }, // Trigger confirmation
+            enabled = !uiState.isBackupInProgress,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (uiState.isBackupInProgress) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Backing up...")
+            } else {
+                Icon(Icons.Default.CloudUpload, contentDescription = "Backup")
+                Spacer(Modifier.width(8.dp))
+                Text("Backup to Cloud")
+            }
+        }
+
+        Text("Backup will overwrite any previous cloud backup.", style = MaterialTheme.typography.bodySmall)
+
+        Button(
+            onClick = { settingsViewModel.onShowRestoreConfirmation() }, // Trigger confirmation
+            enabled = !uiState.isRestoreInProgress,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (uiState.isRestoreInProgress) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Restoring...")
+            } else {
+                Icon(Icons.Default.CloudDownload, contentDescription = "Restore")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Restore from Cloud")
+            }
+        }
+        Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
+    }
+
+    // Backup Confirmation Dialog
+    if (uiState.showBackupConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.onDismissBackupConfirmation() },
+            title = { Text("Confirm Backup") },
+            text = { Text("Are you sure you want to back up your data? This will overwrite any existing cloud backup.") },
+            confirmButton = {
+                Button(onClick = {
+                    settingsViewModel.confirmBackupData { /* snackbar handled in ViewModel */ }
+                }) {
+                    Text("Backup")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { settingsViewModel.onDismissBackupConfirmation() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Restore Confirmation Dialog
+    if (uiState.showRestoreConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { settingsViewModel.onDismissRestoreConfirmation() },
+            title = { Text("Confirm Restore") },
+            text = { Text("Are you sure you want to restore your data? This will overwrite all your current local app data with the cloud backup. This action cannot be undone.") },
+            confirmButton = {
+                Button(onClick = {
+                    settingsViewModel.confirmRestoreData { /* snackbar/restart dialog handled in Settings */ }
+                },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { settingsViewModel.onDismissRestoreConfirmation() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

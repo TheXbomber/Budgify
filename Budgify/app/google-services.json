@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "445136420900",
+    "project_id": "budgify-cf14e",
+    "storage_bucket": "budgify-cf14e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:445136420900:android:8541d655e1f200074518b1",
+        "android_client_info": {
+          "package_name": "com.example.budgify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOo7kX8i88T0CkpTJvn4CKLalF0cg3eU4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
