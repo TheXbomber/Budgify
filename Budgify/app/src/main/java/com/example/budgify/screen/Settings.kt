@@ -149,7 +149,7 @@ fun Settings(
             ) {
                 SettingsOption(
                     icon = Icons.Default.Lock,
-                    title = "Access PIN & Security Question",
+                    title = "Access Security",
                     onClick = { settingsViewModel.onOptionSelected(SettingsOptionType.PIN) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -375,7 +375,7 @@ fun PinSettingsContent(
     ) {
         Text(
             when {
-                isPinSet && isSecurityQASet.value -> "Manage PIN & Security Question"
+                isPinSet && isSecurityQASet.value -> "Manage Access Security Methods"
                 isPinSet -> "Set Security Question & Manage PIN"
                 isSecurityQASet.value -> "Set PIN & Manage Security Question"
                 else -> "Set PIN & Security Question"
@@ -917,7 +917,6 @@ fun BackupRestoreContent(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
 
         Button(
             onClick = { settingsViewModel.onShowBackupConfirmation() }, // Trigger confirmation
@@ -936,7 +935,6 @@ fun BackupRestoreContent(
         }
 
         Text("Backup will overwrite any previous cloud backup.", style = MaterialTheme.typography.bodySmall)
-        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = { settingsViewModel.onShowRestoreConfirmation() }, // Trigger confirmation
