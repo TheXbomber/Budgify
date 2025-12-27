@@ -51,24 +51,17 @@ class SettingsViewModel(
     private val financeRepository: FinanceRepository
 ) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(
+        SettingsUiState(currentTheme = themePreferenceManager.getSavedTheme())
+    )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
 
     init {
         viewModelScope.launch {
-            combine(
-                financeViewModel.unlockedThemeNames,
-                _uiState.map { it.currentTheme },
-                _uiState.map { it.unlockedThemeNames }
-            ) { unlockedThemes, currentTheme, _ ->
-                _uiState.value.copy(
-                    unlockedThemeNames = unlockedThemes,
-                    currentTheme = currentTheme
-                )
-            }.collect { combinedState ->
-                _uiState.update { it.copy(unlockedThemeNames = combinedState.unlockedThemeNames) }
+            financeViewModel.unlockedThemeNames.collect { unlockedThemes ->
+                _uiState.update { it.copy(unlockedThemeNames = unlockedThemes) }
             }
         }
     }
