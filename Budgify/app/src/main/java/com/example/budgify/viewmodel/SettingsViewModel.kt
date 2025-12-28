@@ -40,8 +40,9 @@ data class SettingsUiState(
     val confirmNewPasswordVisible: Boolean = false,
     val isBackupInProgress: Boolean = false,
     val isRestoreInProgress: Boolean = false,
-    val showBackupConfirmationDialog: Boolean = false, // New for backup confirmation
-    val showRestoreConfirmationDialog: Boolean = false // New for restore confirmation
+    val showBackupConfirmationDialog: Boolean = false,
+    val showRestoreConfirmationDialog: Boolean = false,
+    val lastBackupDate: String? = null // New: last backup date string
 )
 
 class SettingsViewModel(
@@ -62,6 +63,17 @@ class SettingsViewModel(
         viewModelScope.launch {
             financeViewModel.unlockedThemeNames.collect { unlockedThemes ->
                 _uiState.update { it.copy(unlockedThemeNames = unlockedThemes) }
+            }
+        }
+        // Fetch last backup date on ViewModel initialization
+        viewModelScope.launch {
+            updateLastBackupDate()
+        }
+        // Re-fetch last backup date when user logs in/out
+        viewModelScope.launch {
+            auth.addAuthStateListener { firebaseAuth ->
+                // Trigger an update when auth state changes
+                viewModelScope.launch { updateLastBackupDate() }
             }
         }
     }
@@ -161,6 +173,7 @@ class SettingsViewModel(
                 )
             }
             onComplete(success)
+            if (success) { updateLastBackupDate() } // Update date after successful backup
         }
     }
 
@@ -189,6 +202,12 @@ class SettingsViewModel(
                 )
             }
             onComplete(success)
+            if (success) { updateLastBackupDate() } // Update date after successful restore
         }
+    }
+
+    private suspend fun updateLastBackupDate() {
+        val dateString = financeRepository.getLastBackupDate()
+        _uiState.update { it.copy(lastBackupDate = dateString) }
     }
 }

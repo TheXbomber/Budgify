@@ -658,7 +658,7 @@ fun PinSettingsContent(
                                 onConfirmPinChange("")
                             } catch (e: Exception) {
                                 Log.e("PinSettingsContent", "Error saving PIN", e)
-                                errorMessage = "Error removing PIN."
+                                errorMessage = "Error saving PIN."
                                 pinSavedSuccessfully = false
                             }
                         }
@@ -1020,7 +1020,24 @@ fun BackupRestoreContent(
                 Text("Restore from Cloud")
             }
         }
+
         Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
+
+        if (uiState.lastBackupDate != null) {
+            Text(
+                text = "Last backup: ${uiState.lastBackupDate}",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        } else {
+            Text(
+                text = "No backup found in cloud.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
     }
 
     // Backup Confirmation Dialog
