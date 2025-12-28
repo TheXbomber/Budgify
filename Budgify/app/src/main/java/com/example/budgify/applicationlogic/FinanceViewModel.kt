@@ -33,10 +33,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import com.google.firebase.auth.FirebaseAuth // Import FirebaseAuth
+import kotlinx.coroutines.tasks.await // Import await for Firebase Tasks
 
 class FinanceViewModel(
     private val repository: FinanceRepository,
-    private val authService: AuthService
+    val authService: AuthService
 ) : ViewModel() {
 
     private val _userId = MutableStateFlow<String?>(null)
@@ -778,6 +780,29 @@ class FinanceViewModel(
             } catch (e: Exception) {
                 Log.e("DevReset", "Error resetting user progress", e)
                 _snackbarMessages.emit("Error resetting progress.")
+            }
+        }
+    }
+
+    // New function to retry Firebase login
+    fun refreshFirebaseLogin() {
+        viewModelScope.launch {
+            val firebaseAuthInstance = FirebaseAuth.getInstance()
+            val firebaseUser = firebaseAuthInstance.currentUser
+
+            if (firebaseUser != null) {
+                try {
+                    // Attempt to refresh the user's token/session
+                    firebaseUser.reload().await()
+                    _snackbarMessages.emit("Firebase connection refreshed successfully!")
+                    Log.d("FinanceViewModel", "Firebase user reloaded successfully.")
+                } catch (e: Exception) {
+                    _snackbarMessages.emit("Failed to refresh Firebase connection: ${e.message}")
+                    Log.e("FinanceViewModel", "Error reloading Firebase user: ${e.message}", e)
+                }
+            } else {
+                _snackbarMessages.emit("No active Firebase user to refresh. Please re-login.")
+                Log.d("FinanceViewModel", "No current Firebase user to reload.")
             }
         }
     }

@@ -29,32 +29,29 @@ class DatabaseAuthService(
 
         if (localUser != null && localUser.password == hashedPassword) {
             // Local authentication successful, now try Firebase
-            return try {
-                // Explicitly specify AuthResult type for clarity and to aid compiler inference
+            try {
                 val firebaseAuthResult: AuthResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
                 val firebaseUser = firebaseAuthResult.user
 
                 if (firebaseUser != null) {
-                    // Update local user with Firebase UID if it doesn't match or is null
+                    // Firebase login successful
                     if (localUser.id != firebaseUser.uid) {
                         userDao.update(localUser.copy(id = firebaseUser.uid))
                         Log.d("DatabaseAuthService", "Updated local user UID with Firebase UID.")
                     }
                     prefs.edit().putString(USER_EMAIL_KEY, email).apply()
-                    Result.success(User(firebaseUser.uid, firebaseUser.email))
-                } else {
-                    // This case should ideally not happen if signInWithEmailAndPassword succeeds
-                    Log.e("DatabaseAuthService", "Firebase signInWithEmailAndPassword succeeded but user is null.")
-                    Result.failure(Exception("Firebase login failed: user is null"))
+                    return Result.success(User(firebaseUser.uid, firebaseUser.email))
                 }
-            } catch (e: FirebaseAuthInvalidCredentialsException) {
-                // If local login worked but Firebase credentials are invalid, this is a mismatch
-                Log.e("DatabaseAuthService", "Local login successful, but Firebase login failed due to invalid credentials: ${e.message}")
-                Result.failure(Exception("Firebase login failed, credentials mismatch."))
             } catch (e: Exception) {
-                Log.e("DatabaseAuthService", "Error during Firebase login: ${e.message}", e)
-                Result.failure(Exception("Failed to sign in with Firebase: ${e.message}"))
+                // Log Firebase login failure but do not block local login
+                Log.e("DatabaseAuthService", "Firebase login failed, proceeding with local-only session. Error: ${e.message}")
             }
+
+            // If Firebase login fails or firebaseUser is null, fall back to local-only session.
+            Log.w("DatabaseAuthService", "Proceeding with local-only session for user: $email")
+            prefs.edit().putString(USER_EMAIL_KEY, email).apply()
+            return Result.success(User(localUser.id, localUser.email))
+
         } else {
             return Result.failure(Exception("Invalid local credentials"))
         }
