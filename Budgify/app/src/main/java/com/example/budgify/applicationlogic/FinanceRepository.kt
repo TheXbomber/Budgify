@@ -19,7 +19,11 @@ import com.example.budgify.entities.User
 import kotlinx.coroutines.flow.Flow
 import com.google.firebase.auth.FirebaseAuth // Import for Firebase Auth
 import com.google.firebase.storage.FirebaseStorage // Import for Firebase Storage
+import com.google.firebase.storage.StorageException
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.tasks.await // For await() on Tasks
 
 class FinanceRepository(
@@ -265,6 +269,34 @@ class FinanceRepository(
                 }
             }
             false
+        }
+    }
+
+    /**
+     * Retrieves the last modified date of the main database backup file from Firebase Storage.
+     * @return A formatted date string (e.g., "dd/MM/yyyy HH:mm") or null if no backup exists or an error occurs.
+     */
+    suspend fun getLastBackupDate(): String? {
+        val userId = auth.currentUser?.uid ?: return null // No user, no backup date
+        val mainDbFileName = DATABASE_NAME // Main database file name
+        val storageRef = storage.reference.child("backups/$userId/$mainDbFileName")
+
+        return try {
+            val metadata = storageRef.metadata.await()
+            val dateMillis = metadata.updatedTimeMillis
+            val formatter = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+            formatter.format(Date(dateMillis))
+        } catch (e: StorageException) {
+            // If the file simply doesn't exist, it's not an error we need to log as much as handle.
+            if (e.errorCode == StorageException.ERROR_OBJECT_NOT_FOUND) {
+                Log.d("FinanceRepository", "No backup file found for $userId/$mainDbFileName.")
+            } else {
+                Log.e("FinanceRepository", "Error getting backup metadata: ${e.message}", e)
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("FinanceRepository", "Unexpected error getting backup date: ${e.message}", e)
+            null
         }
     }
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 data class SettingsUiState(
@@ -40,8 +41,11 @@ data class SettingsUiState(
     val confirmNewPasswordVisible: Boolean = false,
     val isBackupInProgress: Boolean = false,
     val isRestoreInProgress: Boolean = false,
-    val showBackupConfirmationDialog: Boolean = false, // New for backup confirmation
-    val showRestoreConfirmationDialog: Boolean = false // New for restore confirmation
+    val showBackupConfirmationDialog: Boolean = false,
+    val showRestoreConfirmationDialog: Boolean = false,
+    val lastBackupDate: String? = null,
+    val isFirebaseConnected: Boolean = false,
+    val showFirebaseLoginPrompt: Boolean = false // New: to show password prompt for Firebase re-login
 )
 
 class SettingsViewModel(
@@ -60,9 +64,21 @@ class SettingsViewModel(
 
     init {
         viewModelScope.launch {
-            financeViewModel.unlockedThemeNames.collect { unlockedThemes ->
-                _uiState.update { it.copy(unlockedThemeNames = unlockedThemes) }
+            // CORRECTED: Using financeViewModel.unlockedThemeNames
+            financeViewModel.unlockedThemeNames.collect { unlockedThemeNames ->
+                _uiState.update { it.copy(unlockedThemeNames = unlockedThemeNames) }
             }
+        }
+        // Fetch initial state for backup date and firebase connection
+        viewModelScope.launch {
+            updateLastBackupDate()
+            _uiState.update { it.copy(isFirebaseConnected = auth.currentUser != null) }
+        }
+
+        // Listen for auth state changes
+        auth.addAuthStateListener { firebaseAuth ->
+            _uiState.update { it.copy(isFirebaseConnected = firebaseAuth.currentUser != null) }
+            viewModelScope.launch { updateLastBackupDate() }
         }
     }
 
@@ -139,7 +155,7 @@ class SettingsViewModel(
     // Backup confirmation dialog actions
     fun onShowBackupConfirmation() {
         if (auth.currentUser == null) {
-            _uiState.update { it.copy(snackbarMessage = "Please log in to backup your data.") }
+            _uiState.update { it.copy(snackbarMessage = "Not connected to cloud. Please refresh login.") }
             return
         }
         _uiState.update { it.copy(showBackupConfirmationDialog = true) }
@@ -161,13 +177,14 @@ class SettingsViewModel(
                 )
             }
             onComplete(success)
+            if (success) { updateLastBackupDate() } // Update date after successful backup
         }
     }
 
     // Restore confirmation dialog actions
     fun onShowRestoreConfirmation() {
         if (auth.currentUser == null) {
-            _uiState.update { it.copy(snackbarMessage = "Please log in to restore your data.") }
+            _uiState.update { it.copy(snackbarMessage = "Not connected to cloud. Please refresh login.") }
             return
         }
         _uiState.update { it.copy(showRestoreConfirmationDialog = true) }
@@ -189,6 +206,54 @@ class SettingsViewModel(
                 )
             }
             onComplete(success)
+            if (success) { updateLastBackupDate() } // Update date after successful restore
+        }
+    }
+
+    private suspend fun updateLastBackupDate() {
+        val dateString = financeRepository.getLastBackupDate()
+        _uiState.update { it.copy(lastBackupDate = dateString) }
+    }
+
+    // Modified function to handle refreshing Firebase login based on current state
+    fun refreshFirebaseLogin() {
+        viewModelScope.launch {
+            val firebaseUser = auth.currentUser
+            if (firebaseUser != null) {
+                // There's an active Firebase session, try to reload it
+                financeViewModel.refreshFirebaseLogin() // This will emit snackbar messages
+            } else {
+                // No active Firebase session, prompt for password to re-authenticate
+                // CORRECTED: Directly use authService to get the current user's email
+                val currentUser = financeViewModel.authService.getCurrentUser()
+                if (currentUser?.email != null) {
+                    _uiState.update { it.copy(showFirebaseLoginPrompt = true) }
+                } else {
+                    _uiState.update { it.copy(snackbarMessage = "No active user to refresh. Please re-login completely.") }
+                }
+            }
+        }
+    }
+
+    fun onDismissFirebaseLoginPrompt() {
+        _uiState.update { it.copy(showFirebaseLoginPrompt = false) }
+    }
+
+    fun onConfirmFirebaseLoginPrompt(password: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(showFirebaseLoginPrompt = false) }
+            val userEmail = financeViewModel.authService.getCurrentUser()?.email
+
+            if (userEmail != null) {
+                val result = financeViewModel.authService.login(userEmail, password)
+                if (result.isSuccess) {
+                    _uiState.update { it.copy(snackbarMessage = "Firebase re-login successful!") }
+                } else {
+                    _uiState.update { it.copy(snackbarMessage = "Firebase re-login failed: ${result.exceptionOrNull()?.message}") }
+                }
+            } else {
+                _uiState.update { it.copy(snackbarMessage = "Could not retrieve user email for Firebase re-login.") }
+            }
         }
     }
 }

@@ -87,6 +87,11 @@ import com.example.budgify.utils.securityQuestions
 import com.example.budgify.utils.getBiometricEnabled
 import com.example.budgify.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.ui.window.DialogProperties // Correct import
+import androidx.compose.foundation.background // Correct import
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip // Correct import
 
 const val DEV = false
 
@@ -305,6 +310,7 @@ fun Settings(
                     SettingsOptionType.BACKUP_RESTORE -> {
                         BackupRestoreContent(
                             settingsViewModel = settingsViewModel,
+                            snackbarHostState = snackbarHostState,
                             onRestartApp = onRestartApp
                         )
                     }
@@ -339,6 +345,13 @@ fun Settings(
                         Text("Later")
                     }
                 }
+            )
+        }
+        // New: Password prompt for Firebase re-login
+        if (uiState.showFirebaseLoginPrompt) {
+            PasswordPromptDialog(
+                onDismiss = { settingsViewModel.onDismissFirebaseLoginPrompt() },
+                onConfirm = { password -> settingsViewModel.onConfirmFirebaseLoginPrompt(password) },
             )
         }
     }
@@ -961,6 +974,7 @@ fun ChangePasswordContent(
 @Composable
 fun BackupRestoreContent(
     settingsViewModel: SettingsViewModel,
+    snackbarHostState: SnackbarHostState,
     onRestartApp: () -> Unit // Callback to restart the app
 ) {
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
@@ -980,47 +994,80 @@ fun BackupRestoreContent(
             fontWeight = FontWeight.Bold
         )
 
-        Text(
-            "Ensure you are logged in to your account before backing up or restoring data.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center
-        )
+        // Conditional display based on Firebase connection status
+        if (uiState.isFirebaseConnected) {
+            Text(
+                text = "Ensure you are logged in to your account before backing up or restoring data.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
 
-        Button(
-            onClick = { settingsViewModel.onShowBackupConfirmation() }, // Trigger confirmation
-            enabled = !uiState.isBackupInProgress,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (uiState.isBackupInProgress) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                Spacer(Modifier.width(8.dp))
-                Text("Backing up...")
+            Button(
+                onClick = { settingsViewModel.onShowBackupConfirmation() }, // Trigger confirmation
+                enabled = !uiState.isBackupInProgress,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (uiState.isBackupInProgress) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary) // Changed color to onPrimary
+                    Spacer(Modifier.width(8.dp))
+                    Text("Backing up...")
+                } else {
+                    Icon(Icons.Default.CloudUpload, contentDescription = "Backup")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Backup to Cloud")
+                }
+            }
+
+            Text("Backup will overwrite any previous cloud backup.", style = MaterialTheme.typography.bodySmall)
+
+            Button(
+                onClick = { settingsViewModel.onShowRestoreConfirmation() }, // Trigger confirmation
+                enabled = !uiState.isRestoreInProgress,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (uiState.isRestoreInProgress) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Restoring...")
+                } else {
+                    Icon(Icons.Default.CloudDownload, contentDescription = "Restore")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Restore from Cloud")
+                }
+            }
+
+            Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
+
+            if (uiState.lastBackupDate != null) {
+                Text(
+                    text = "Last backup: ${uiState.lastBackupDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             } else {
-                Icon(Icons.Default.CloudUpload, contentDescription = "Backup")
-                Spacer(Modifier.width(8.dp))
-                Text("Backup to Cloud")
+                Text(
+                    text = "No backup found in cloud.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        } else { // Firebase is not connected
+            Text(
+                text = "Cloud services are not connected. Backup and restore are disabled.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+            Button(
+                onClick = { settingsViewModel.refreshFirebaseLogin() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Refresh Login")
             }
         }
-
-        Text("Backup will overwrite any previous cloud backup.", style = MaterialTheme.typography.bodySmall)
-
-        Button(
-            onClick = { settingsViewModel.onShowRestoreConfirmation() }, // Trigger confirmation
-            enabled = !uiState.isRestoreInProgress,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (uiState.isRestoreInProgress) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-                Spacer(Modifier.width(8.dp))
-                Text("Restoring...")
-            } else {
-                Icon(Icons.Default.CloudDownload, contentDescription = "Restore")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Restore from Cloud")
-            }
-        }
-        Text("Restoring will replace your current local data.", style = MaterialTheme.typography.bodySmall)
     }
 
     // Backup Confirmation Dialog
@@ -1066,4 +1113,89 @@ fun BackupRestoreContent(
             }
         )
     }
+
+    // New: Password prompt for Firebase re-login
+    if (uiState.showFirebaseLoginPrompt) {
+        PasswordPromptDialog(
+            onDismiss = { settingsViewModel.onDismissFirebaseLoginPrompt() },
+            onConfirm = { password -> settingsViewModel.onConfirmFirebaseLoginPrompt(password) },
+        )
+    }
+}
+
+// No longer needed as options are in dropdown
+/*
+@Composable
+fun SettingsOption(
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Icon(imageVector = icon, contentDescription = title, modifier = Modifier.size(24.dp))
+        Text(text = title, fontSize = 18.sp, fontWeight = FontWeight.Normal)
+    }
+    Divider()
+}
+*/
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PasswordPromptDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var passwordInput by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Re-authenticate for Cloud Services")
+        },
+        text = {
+            Column {
+                Text("Please enter your password to connect to cloud services. This is required for backup and restore.")
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = passwordInput,
+                    onValueChange = { passwordInput = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                        val description = if (passwordVisible) "Hide password" else "Show password"
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(imageVector = image, contentDescription = description)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(passwordInput) },
+                enabled = passwordInput.isNotBlank()
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
