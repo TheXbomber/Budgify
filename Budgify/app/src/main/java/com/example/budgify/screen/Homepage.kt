@@ -29,7 +29,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
@@ -97,6 +100,7 @@ import com.example.budgify.navigation.TopBar
 import com.example.budgify.navigation.XButton
 import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.viewmodel.HomepageViewModel
+import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -222,7 +226,6 @@ fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepage
     }
     if (uiState.showEditTransactionDialog) {
         EditTransactionDialog(
-            transaction = uiState.transactionToAction!!,
             viewModel = homepageViewModel,
             onDismiss = { homepageViewModel.onDismissEditTransactionDialog() }
         )
@@ -250,6 +253,18 @@ fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepage
             transactionType = uiState.chartTransactionType,
             allTransactions = uiState.transactions,
             onDismiss = { homepageViewModel.onDismissChartDetailDialog() }
+        )
+    }
+
+    if (uiState.showLocationPickerDialog) {
+        LocationPickerDialog(
+            initialLocation = if (uiState.editDialogState.latitude != null && uiState.editDialogState.longitude != null) {
+                LatLng(uiState.editDialogState.latitude!!, uiState.editDialogState.longitude!!)
+            } else null,
+            onDismiss = { homepageViewModel.onDismissLocationPicker() },
+            onLocationSelected = { latLng ->
+                homepageViewModel.onEditDialogLocationChange(latLng.latitude, latLng.longitude)
+            }
         )
     }
 }
@@ -363,18 +378,12 @@ fun LastTransactionBox(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditTransactionDialog(
-    transaction: MyTransaction,
     viewModel: HomepageViewModel,
     onDismiss: () -> Unit
 ) {
-    var description by remember { mutableStateOf(transaction.description) }
-    var amount by remember { mutableStateOf(transaction.amount.toString().replace('.', ',')) }
-    var selectedCategoryId by remember { mutableStateOf<Int?>(transaction.categoryId) }
-    var selectedDate by remember { mutableStateOf<LocalDate?>(transaction.date) }
-    var selectedType by remember { mutableStateOf<TransactionType>(transaction.type) }
-    var selectedAccountId by remember { mutableStateOf<Int?>(transaction.accountId) }
-    var showDatePickerDialog by remember { mutableStateOf(false) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val dialogState = uiState.editDialogState
+    var showDatePickerDialog by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -394,43 +403,57 @@ fun EditTransactionDialog(
                 )
                 XButton(onDismiss)
             }
-
             Spacer(modifier = Modifier.height(16.dp))
 
             TextField(
-                value = description,
-                onValueChange = { description = it },
+                value = dialogState.description,
+                onValueChange = { viewModel.onEditDialogDescriptionChange(it) },
                 label = { Text("Description (max 30 characters)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = dialogState.errorMessage?.contains("Description") == true
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             TextField(
-                value = amount,
-                onValueChange = { amount = it },
+                value = dialogState.amount,
+                onValueChange = { viewModel.onEditDialogAmountChange(it) },
                 label = { Text("Amount") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = dialogState.errorMessage?.contains("amount") == true
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            CategoryDropdown(
-                categories = uiState.transactions.mapNotNull { it.category }.distinctBy { it.id },
-                selectedCategoryId = selectedCategoryId,
-                onCategorySelected = { selectedCategoryId = it }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            if (!dialogState.isOriginalCategoryDefault) {
+                CategoryDropdown(
+                    categories = dialogState.availableCategories,
+                    selectedCategoryId = dialogState.selectedCategoryId,
+                    onCategorySelected = { viewModel.onEditDialogCategoryChange(it) }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            } else {
+                val originalCategoryName = dialogState.availableCategories.firstOrNull { it.id == dialogState.transaction?.categoryId }?.desc ?: "Default Category"
+                TextField(
+                    value = originalCategoryName,
+                    onValueChange = {},
+                    label = { Text("Category (System)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    enabled = false
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             AccountDropdown(
-                accounts = uiState.accounts,
-                selectedAccountId = selectedAccountId,
-                onAccountSelected = { selectedAccountId = it },
-                isError = false
+                accounts = dialogState.availableAccounts,
+                selectedAccountId = dialogState.selectedAccountId,
+                onAccountSelected = { viewModel.onEditDialogAccountChange(it) },
+                isError = dialogState.errorMessage?.contains("account") == true
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             TextField(
-                value = selectedDate?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "",
+                value = dialogState.selectedDate?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "",
                 onValueChange = {},
                 label = { Text("Date") },
                 readOnly = true,
@@ -441,16 +464,57 @@ fun EditTransactionDialog(
                         modifier = Modifier.clickable { showDatePickerDialog = true }
                     )
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = dialogState.errorMessage?.contains("date") == true
             )
             Spacer(modifier = Modifier.height(8.dp))
 
             TransactionTypeSelector(
-                selectedType = selectedType,
-                onTypeSelected = { selectedType = it }
+                selectedType = dialogState.selectedType,
+                onTypeSelected = { viewModel.onEditDialogTypeChange(it) }
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Location Section
+            Text("Location:", style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (dialogState.latitude != null && dialogState.longitude != null) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Selected: ${String.format("%.4f", dialogState.latitude)}, ${String.format("%.4f", dialogState.longitude)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    IconButton(onClick = { viewModel.onEditDialogLocationChange(null, null) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Remove Location", tint = MaterialTheme.colorScheme.error)
+                    }
+                    IconButton(onClick = { viewModel.onShowLocationPicker() }) {
+                        Icon(Icons.Default.Map, contentDescription = "Edit Location")
+                    }
+                } else {
+                    Text("No location set", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, modifier = Modifier.weight(1f))
+                    Button(onClick = { viewModel.onShowLocationPicker() }) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null)
+                        Spacer(Modifier.size(4.dp))
+                        Text("Add")
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
+
+            dialogState.errorMessage?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -458,18 +522,7 @@ fun EditTransactionDialog(
             ) {
                 Button(
                     onClick = {
-                        val amountDouble = amount.replace(',', '.').toDoubleOrNull()
-                        if (description.isNotBlank() && amountDouble != null && selectedAccountId != null && selectedDate != null) {
-                            val updatedTransaction = transaction.copy(
-                                accountId = selectedAccountId!!,
-                                type = selectedType,
-                                date = selectedDate!!,
-                                description = description,
-                                amount = amountDouble,
-                                categoryId = selectedCategoryId
-                            )
-                            viewModel.updateTransaction(updatedTransaction)
-                        }
+                        viewModel.onSaveChangesClicked()
                     }) {
                     Text("Save Changes")
                 }
@@ -478,7 +531,7 @@ fun EditTransactionDialog(
     }
 
     if (showDatePickerDialog) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = transaction.date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dialogState.transaction?.date?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli())
         val confirmEnabled = remember { derivedStateOf { datePickerState.selectedDateMillis != null } }
         DatePickerDialog(
             onDismissRequest = { showDatePickerDialog = false },
@@ -486,9 +539,10 @@ fun EditTransactionDialog(
                 TextButton(
                     onClick = {
                         showDatePickerDialog = false
-                        selectedDate = datePickerState.selectedDateMillis?.let {
+                        val selectedDate = datePickerState.selectedDateMillis?.let {
                             Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
                         }
+                        viewModel.onEditDialogDateChange(selectedDate)
                     },
                     enabled = confirmEnabled.value
                 ) {
