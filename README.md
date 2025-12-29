@@ -3,7 +3,7 @@ Requirements:
 - [x] Support multiple users with login and authentication
 - [x] Include some 2D graphics
 - [x] Use at least one sensor
-- [ ] Use GPS
+- [x] Use GPS
 - [x] Use the camera or perform image processing
 - [x] Include concurrency (async tasks, coroutines, etc.)
 - [x] Use at least one additional cloud feature (e.g., Google Cloud service)
