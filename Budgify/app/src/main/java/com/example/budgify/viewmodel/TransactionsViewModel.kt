@@ -29,6 +29,7 @@ data class TransactionsUiState(
     val showEditTransactionDialog: Boolean = false,
     val showDeleteTransactionConfirmationDialog: Boolean = false,
     val snackbarMessage: String? = null,
+    val showLocationPickerDialog: Boolean = false,
 
     // State for the Edit Dialog
     val editDialogState: EditTransactionDialogState = EditTransactionDialogState()
@@ -42,6 +43,8 @@ data class EditTransactionDialogState(
     val selectedAccountId: Int? = null,
     val selectedDate: LocalDate? = null,
     val selectedType: TransactionType = TransactionType.EXPENSE,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val isOriginalCategoryDefault: Boolean = false,
     val availableCategories: List<Category> = emptyList(),
     val availableAccounts: List<Account> = emptyList(),
@@ -128,6 +131,8 @@ class TransactionsViewModel(private val financeViewModel: FinanceViewModel) : Vi
                         selectedAccountId = transaction.accountId,
                         selectedDate = transaction.date,
                         selectedType = transaction.type,
+                        latitude = transaction.latitude,
+                        longitude = transaction.longitude,
                         isOriginalCategoryDefault = isDefault,
                         availableCategories = it.editDialogState.availableCategories,
                         availableAccounts = it.editDialogState.availableAccounts
@@ -206,6 +211,23 @@ class TransactionsViewModel(private val financeViewModel: FinanceViewModel) : Vi
         _uiState.update { it.copy(editDialogState = it.editDialogState.copy(selectedType = newType)) }
     }
 
+    fun onEditDialogLocationChange(lat: Double?, lng: Double?) {
+        _uiState.update {
+             it.copy(
+                 showLocationPickerDialog = false,
+                 editDialogState = it.editDialogState.copy(latitude = lat, longitude = lng)
+             )
+        }
+    }
+
+    fun onShowLocationPicker() {
+        _uiState.update { it.copy(showLocationPickerDialog = true) }
+    }
+
+    fun onDismissLocationPicker() {
+        _uiState.update { it.copy(showLocationPickerDialog = false) }
+    }
+
     fun onSaveChangesClicked() {
         val dialogState = _uiState.value.editDialogState
         val originalTransaction = dialogState.transaction ?: return
@@ -236,7 +258,9 @@ class TransactionsViewModel(private val financeViewModel: FinanceViewModel) : Vi
             date = dialogState.selectedDate,
             description = description,
             amount = amountDouble,
-            categoryId = if (dialogState.isOriginalCategoryDefault) originalTransaction.categoryId else dialogState.selectedCategoryId
+            categoryId = if (dialogState.isOriginalCategoryDefault) originalTransaction.categoryId else dialogState.selectedCategoryId,
+            latitude = dialogState.latitude,
+            longitude = dialogState.longitude
         )
 
         viewModelScope.launch {

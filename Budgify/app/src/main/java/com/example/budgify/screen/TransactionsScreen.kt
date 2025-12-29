@@ -1,9 +1,11 @@
 package com.example.budgify.screen
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.location.Geocoder
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,11 +19,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -33,8 +42,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -53,13 +66,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
@@ -71,13 +88,28 @@ import com.example.budgify.navigation.TopBar
 import com.example.budgify.navigation.XButton
 import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.viewmodel.TransactionsViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.rememberCameraPositionState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionsScreen(
     navController: NavController,
@@ -89,6 +121,9 @@ fun TransactionsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val uiState by transactionsViewModel.uiState.collectAsStateWithLifecycle()
+    val allTransactions by viewModel.allTransactionsWithDetails.collectAsStateWithLifecycle()
+
+    var isMapMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.snackbarMessage) {
         uiState.snackbarMessage?.let {
@@ -107,31 +142,70 @@ fun TransactionsScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(innerPadding)
         ) {
-            item {
-                MonthlyCalendar(
-                    currentMonth = uiState.currentMonth,
-                    transactionDatesForCurrentMonth = uiState.transactionDatesForCurrentMonth,
-                    onMonthChanged = { transactionsViewModel.onMonthChanged(it) },
-                    onDaySelected = { transactionsViewModel.onDateSelected(it) }
-                )
-            }
-            item {
-                TransactionBox(
-                    uiState = uiState,
-                    onLongClick = { transactionsViewModel.onTransactionLongClicked(it) },
-                    showSnackbar = {
-                        scope.launch {
-                            snackbarHostState.showSnackbar(it)
-                        }
+            // Toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                SingleChoiceSegmentedButtonRow {
+                    SegmentedButton(
+                        selected = !isMapMode,
+                        onClick = { isMapMode = false },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    ) {
+                        Icon(Icons.Default.CalendarToday, contentDescription = null)
+                        //Spacer(Modifier.size(8.dp))
+                        //Text("List")
                     }
+                    SegmentedButton(
+                        selected = isMapMode,
+                        onClick = { isMapMode = true },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    ) {
+                        Icon(Icons.Default.Map, contentDescription = null)
+                        //Spacer(Modifier.size(8.dp))
+                        //Text("Map")
+                    }
+                }
+            }
+
+            if (isMapMode) {
+                TransactionsMapView(
+                    transactions = allTransactions
                 )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Top,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    item {
+                        MonthlyCalendar(
+                            currentMonth = uiState.currentMonth,
+                            transactionDatesForCurrentMonth = uiState.transactionDatesForCurrentMonth,
+                            onMonthChanged = { transactionsViewModel.onMonthChanged(it) },
+                            onDaySelected = { transactionsViewModel.onDateSelected(it) }
+                        )
+                    }
+                    item {
+                        TransactionBox(
+                            uiState = uiState,
+                            onLongClick = { transactionsViewModel.onTransactionLongClicked(it) },
+                            showSnackbar = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(it)
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
     }
@@ -159,6 +233,79 @@ fun TransactionsScreen(
             onDismiss = { transactionsViewModel.onDismissDeleteConfirmationDialog() },
             onConfirm = { transactionsViewModel.onConfirmDeleteTransaction() }
         )
+    }
+
+    if (uiState.showLocationPickerDialog) {
+        LocationPickerDialog(
+            initialLocation = if (uiState.editDialogState.latitude != null && uiState.editDialogState.longitude != null) {
+                LatLng(uiState.editDialogState.latitude!!, uiState.editDialogState.longitude!!)
+            } else null,
+            onDismiss = { transactionsViewModel.onDismissLocationPicker() },
+            onLocationSelected = { latLng ->
+                transactionsViewModel.onEditDialogLocationChange(latLng.latitude, latLng.longitude)
+            }
+        )
+    }
+}
+
+@SuppressLint("MissingPermission")
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun TransactionsMapView(
+    transactions: List<TransactionWithDetails>
+) {
+    val locationPermissionsState = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
+
+    var isMyLocationEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!locationPermissionsState.allPermissionsGranted) {
+            locationPermissionsState.launchMultiplePermissionRequest()
+        }
+    }
+    
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+         isMyLocationEnabled = locationPermissionsState.allPermissionsGranted
+    }
+
+    val cameraPositionState = rememberCameraPositionState {
+        // Default to Rome or some default location if no transactions
+        position = CameraPosition.fromLatLngZoom(LatLng(41.9028, 12.4964), 5f) 
+    }
+    
+    // Attempt to center on the latest transaction with location if available
+    LaunchedEffect(transactions) {
+        val latestTransactionWithLoc = transactions.lastOrNull { 
+            it.transaction.latitude != null && it.transaction.longitude != null 
+        }
+        if (latestTransactionWithLoc != null) {
+             val lat = latestTransactionWithLoc.transaction.latitude!!
+             val lng = latestTransactionWithLoc.transaction.longitude!!
+             cameraPositionState.position = CameraPosition.fromLatLngZoom(LatLng(lat, lng), 12f)
+        }
+    }
+
+    GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        properties = MapProperties(isMyLocationEnabled = isMyLocationEnabled),
+        uiSettings = MapUiSettings(myLocationButtonEnabled = true, zoomControlsEnabled = true)
+    ) {
+        transactions.forEach { transactionWithDetails ->
+            val t = transactionWithDetails.transaction
+            if (t.latitude != null && t.longitude != null) {
+                Marker(
+                    state = MarkerState(position = LatLng(t.latitude, t.longitude)),
+                    title = t.description,
+                    snippet = "${t.amount}€ - ${t.date}"
+                )
+            }
+        }
     }
 }
 
@@ -461,6 +608,38 @@ fun EditTransactionDialog(
                 selectedType = dialogState.selectedType,
                 onTypeSelected = { viewModel.onEditDialogTypeChange(it) }
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Location Section
+            Text("Location:", style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (dialogState.latitude != null && dialogState.longitude != null) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Selected: ${String.format("%.4f", dialogState.latitude)}, ${String.format("%.4f", dialogState.longitude)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    IconButton(onClick = { viewModel.onEditDialogLocationChange(null, null) }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Remove Location", tint = MaterialTheme.colorScheme.error)
+                    }
+                    IconButton(onClick = { viewModel.onShowLocationPicker() }) {
+                        Icon(Icons.Default.Map, contentDescription = "Edit Location")
+                    }
+                } else {
+                    Text("No location set", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, modifier = Modifier.weight(1f))
+                    Button(onClick = { viewModel.onShowLocationPicker() }) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null)
+                        Spacer(Modifier.size(4.dp))
+                        Text("Add")
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             dialogState.errorMessage?.let {
@@ -508,6 +687,200 @@ fun EditTransactionDialog(
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@SuppressLint("MissingPermission")
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun LocationPickerDialog(
+    initialLocation: LatLng?,
+    onDismiss: () -> Unit,
+    onLocationSelected: (LatLng) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    
+    val locationPermissionsState = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
+
+    var isMyLocationEnabled by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!locationPermissionsState.allPermissionsGranted) {
+            locationPermissionsState.launchMultiplePermissionRequest()
+        }
+    }
+    
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+        isMyLocationEnabled = locationPermissionsState.allPermissionsGranted
+    }
+
+    val cameraPositionState = rememberCameraPositionState {
+        // Default to Rome or initial location
+        val target = initialLocation ?: LatLng(41.9028, 12.4964)
+        position = CameraPosition.fromLatLngZoom(target, 15f)
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+    var searchError by remember { mutableStateOf<String?>(null) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false) // Full screen ish
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Pick Location", style = MaterialTheme.typography.titleLarge)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+                
+                // Search Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text("Search Place") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                             focusManager.clearFocus()
+                             if (searchQuery.isNotBlank()) {
+                                 isSearching = true
+                                 searchError = null
+                                 scope.launch(Dispatchers.IO) {
+                                     try {
+                                         val geocoder = Geocoder(context)
+                                         // Deprecated in API 33 but usually works or needs listener. 
+                                         // For simplicity using blocking list for now, or fallback.
+                                         @Suppress("DEPRECATION")
+                                         val addresses = geocoder.getFromLocationName(searchQuery, 1)
+                                         if (!addresses.isNullOrEmpty()) {
+                                             val location = addresses[0]
+                                             val latLng = LatLng(location.latitude, location.longitude)
+                                             withContext(Dispatchers.Main) {
+                                                 cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
+                                                 isSearching = false
+                                             }
+                                         } else {
+                                              withContext(Dispatchers.Main) {
+                                                  searchError = "Place not found"
+                                                  isSearching = false
+                                              }
+                                         }
+                                     } catch (e: IOException) {
+                                          withContext(Dispatchers.Main) {
+                                              searchError = "Network error"
+                                              isSearching = false
+                                          }
+                                     }
+                                 }
+                             }
+                        }),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                // Trigger search same as above
+                                 focusManager.clearFocus()
+                                 if (searchQuery.isNotBlank()) {
+                                     isSearching = true
+                                     searchError = null
+                                     scope.launch(Dispatchers.IO) {
+                                         try {
+                                             val geocoder = Geocoder(context)
+                                             @Suppress("DEPRECATION")
+                                             val addresses = geocoder.getFromLocationName(searchQuery, 1)
+                                             if (!addresses.isNullOrEmpty()) {
+                                                 val location = addresses[0]
+                                                 val latLng = LatLng(location.latitude, location.longitude)
+                                                 withContext(Dispatchers.Main) {
+                                                     cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
+                                                     isSearching = false
+                                                 }
+                                             } else {
+                                                  withContext(Dispatchers.Main) {
+                                                      searchError = "Place not found"
+                                                      isSearching = false
+                                                  }
+                                             }
+                                         } catch (e: IOException) {
+                                              withContext(Dispatchers.Main) {
+                                                  searchError = "Network error"
+                                                  isSearching = false
+                                              }
+                                         }
+                                     }
+                                 }
+                            }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                        }
+                    )
+                }
+                if (searchError != null) {
+                    Text(
+                        searchError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+                
+                // Map
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    GoogleMap(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraPositionState = cameraPositionState,
+                        properties = MapProperties(isMyLocationEnabled = isMyLocationEnabled),
+                        uiSettings = MapUiSettings(myLocationButtonEnabled = true, zoomControlsEnabled = true)
+                    )
+                    
+                    // Center Marker
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Center",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp).align(Alignment.Center).padding(bottom = 24.dp) // Offset slightly up to match pin tip
+                    )
+                }
+                
+                // Footer
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Button(
+                        onClick = {
+                            onLocationSelected(cameraPositionState.position.target)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Confirm Location")
+                    }
+                }
+            }
         }
     }
 }

@@ -43,5 +43,7 @@ data class MyTransaction(
     val date: LocalDate,
     val description: String,
     val amount: Double,
-    val categoryId: Int?
+    val categoryId: Int?,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )

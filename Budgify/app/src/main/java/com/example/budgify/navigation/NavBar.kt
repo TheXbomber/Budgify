@@ -1,6 +1,7 @@
 package com.example.budgify.navigation
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -49,6 +50,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -103,8 +105,12 @@ import com.example.budgify.utils.parseTransactionDate
 import com.example.budgify.utils.processImageForReceipt
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.Instant
@@ -328,6 +334,7 @@ fun BottomBar(
     }
 }
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun AddTransactionDialog(
@@ -371,6 +378,54 @@ fun AddTransactionDialog(
     // Flags to track if a launch is pending after permission grant
     var pendingCameraLaunch by remember { mutableStateOf(false) }
     var pendingGalleryLaunch by remember { mutableStateOf(false) }
+
+    // Location
+    var addLocation by remember { mutableStateOf(false) }
+    var currentLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    val locationPermissionsState = rememberMultiplePermissionsState(
+        permissions = listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+    fun fetchLocation() {
+        if (locationPermissionsState.allPermissionsGranted) {
+            try {
+                val cancellationTokenSource = CancellationTokenSource()
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    cancellationTokenSource.token
+                ).addOnSuccessListener { location ->
+                    if (location != null) {
+                        currentLocation = Pair(location.latitude, location.longitude)
+                    }
+                }
+            } catch (e: SecurityException) {
+                // Handle exception
+            }
+        }
+    }
+
+    LaunchedEffect(addLocation) {
+        if (addLocation) {
+            if (locationPermissionsState.allPermissionsGranted) {
+                fetchLocation()
+            } else {
+                locationPermissionsState.launchMultiplePermissionRequest()
+            }
+        } else {
+            currentLocation = null
+        }
+    }
+
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+        if (locationPermissionsState.allPermissionsGranted && addLocation) {
+            fetchLocation()
+        }
+    }
+
 
     val receiptScanRepository = remember { ReceiptScanRepository() }
 
@@ -698,6 +753,34 @@ fun AddTransactionDialog(
                 }
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Location Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Add current location")
+                Switch(
+                    checked = addLocation,
+                    onCheckedChange = { addLocation = it }
+                )
+            }
+            if (addLocation && currentLocation == null) {
+                Text(
+                    "Fetching location...",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            } else if (addLocation && currentLocation != null) {
+                Text(
+                    "Location fetched: ${currentLocation?.first}, ${currentLocation?.second}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Row(
@@ -716,7 +799,9 @@ fun AddTransactionDialog(
                                 date = selectedDate!!,
                                 description = description,
                                 amount = amountDouble,
-                                categoryId = selectedCategoryId
+                                categoryId = selectedCategoryId,
+                                latitude = currentLocation?.first,
+                                longitude = currentLocation?.second
                             )
                             viewModel.addTransaction(newTransaction)
                             onTransactionAdded(newTransaction)
