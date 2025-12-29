@@ -6,8 +6,8 @@ import com.example.budgify.dataaccessobjects.UserDao
 import com.example.budgify.utils.hashPassword
 import com.google.firebase.auth.AuthResult // Import AuthResult
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.auth.EmailAuthProvider
@@ -24,43 +24,66 @@ class DatabaseAuthService(
     private val firebaseAuth: FirebaseAuth = Firebase.auth // Initialize Firebase Auth
 
     override suspend fun login(email: String, password: String): Result<User> {
-        val localUser = userDao.getUserByEmail(email)
         val hashedPassword = hashPassword(password)
 
-        if (localUser != null && localUser.password == hashedPassword) {
-            // Local authentication successful, now try Firebase
-            try {
-                val firebaseAuthResult: AuthResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
-                val firebaseUser = firebaseAuthResult.user
+        // 1. Try Firebase login first
+        try {
+            val firebaseAuthResult: AuthResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
+            val firebaseUser = firebaseAuthResult.user
 
-                if (firebaseUser != null) {
-                    // Firebase login successful
-                    if (localUser.id != firebaseUser.uid) {
-                        userDao.update(localUser.copy(id = firebaseUser.uid))
-                        Log.d("DatabaseAuthService", "Updated local user UID with Firebase UID.")
-                    }
-                    prefs.edit().putString(USER_EMAIL_KEY, email).apply()
-                    return Result.success(User(firebaseUser.uid, firebaseUser.email))
+            if (firebaseUser != null) {
+                var localUser = userDao.getUserByEmail(email)
+
+                if (localUser == null) {
+                    // Firebase login successful, but no local user. Create one.
+                    val newLocalUser = com.example.budgify.entities.User(
+                        id = firebaseUser.uid,
+                        email = email,
+                        password = hashedPassword // Store the hashed provided password for local login
+                    )
+                    userDao.insert(newLocalUser)
+                    Log.d("DatabaseAuthService", "Created new local user after successful Firebase login.")
+                } else if (localUser.id != firebaseUser.uid || localUser.password != hashedPassword) {
+                    // Local user exists, but UID or password mismatch. Update local user.
+                    val updatedLocalUser = localUser.copy(
+                        id = firebaseUser.uid,
+                        password = hashedPassword
+                    )
+                    userDao.update(updatedLocalUser)
+                    Log.d("DatabaseAuthService", "Updated local user after successful Firebase login (UID/password mismatch).")
                 }
-            } catch (e: Exception) {
-                // Log Firebase login failure but do not block local login
-                Log.e("DatabaseAuthService", "Firebase login failed, proceeding with local-only session. Error: ${e.message}")
+
+                prefs.edit().putString(USER_EMAIL_KEY, email).apply()
+                return Result.success(User(firebaseUser.uid, firebaseUser.email))
             }
-
-            // If Firebase login fails or firebaseUser is null, fall back to local-only session.
-            Log.w("DatabaseAuthService", "Proceeding with local-only session for user: $email")
-            prefs.edit().putString(USER_EMAIL_KEY, email).apply()
-            return Result.success(User(localUser.id, localUser.email))
-
-        } else {
-            return Result.failure(Exception("Invalid local credentials"))
+        } catch (e: FirebaseAuthInvalidCredentialsException) {
+            // Specific handling for Firebase invalid credentials
+            Log.e("DatabaseAuthService", "Firebase login failed due to invalid credentials: ${e.message}")
+            // Fall through to local login attempt
+        } catch (e: Exception) {
+            // General Firebase login failure (e.g., network issues)
+            Log.e("DatabaseAuthService", "Firebase login failed. Error: ${e.message}", e)
+            // Fall through to local login attempt
         }
+
+        // 2. If Firebase login failed or was skipped, try local login as a fallback
+        val localUser = userDao.getUserByEmail(email)
+        if (localUser != null && localUser.password == hashedPassword) {
+            prefs.edit().putString(USER_EMAIL_KEY, email).apply()
+            Log.d("DatabaseAuthService", "Local login successful (Firebase either failed or was not tried).")
+            return Result.success(User(localUser.id, localUser.email))
+        }
+
+        return Result.failure(Exception("Invalid credentials or account not found."))
     }
 
     override suspend fun register(email: String, password: String): Result<User> {
         if (password.length < 6) {
             return Result.failure(Exception("Password must be at least 6 characters long."))
         }
+
+        // Check if user already exists locally BEFORE trying Firebase, to prevent local collision issues
+        // if Firebase registration succeeds but local fails for some reason other than collision.
         if (userDao.getUserByEmail(email) != null) {
             return Result.failure(Exception("User already exists locally."))
         }
@@ -103,16 +126,28 @@ class DatabaseAuthService(
         // Prioritize getting the Firebase user as the source of truth for current session
         val firebaseUser = firebaseAuth.currentUser
         return if (firebaseUser != null) {
-            val localUser = userDao.getUserByEmail(firebaseUser.email ?: "")
-            if (localUser != null && localUser.id == firebaseUser.uid) {
-                User(firebaseUser.uid, firebaseUser.email)
-            } else {
-                // If Firebase user exists but local user is not found or UID doesn't match,
-                // it might indicate a data inconsistency.
-                // For simplicity, we'll return the Firebase user.
-                Log.w("DatabaseAuthService", "Firebase user found, but local user data mismatch or not found.")
-                User(firebaseUser.uid, firebaseUser.email)
+            val userEmail = firebaseUser.email ?: ""
+            var localUser = userDao.getUserByEmail(userEmail)
+
+            // If a Firebase user exists, ensure a corresponding local user exists and is up-to-date.
+            // Password is not available here, so we don't try to sync it.
+            // A successful login or registration flow would handle the password for the local user.
+            if (localUser == null) {
+                // If no local user, create a minimal one. The password would be updated on a successful login.
+                val newLocalUser = com.example.budgify.entities.User(
+                    id = firebaseUser.uid,
+                    email = userEmail,
+                    password = "" // Placeholder: Actual password will be set during login/registration.
+                )
+                userDao.insert(newLocalUser)
+                Log.d("DatabaseAuthService", "Created minimal local user for existing Firebase user in getCurrentUser.")
+            } else if (localUser.id != firebaseUser.uid) {
+                // If local user exists but UID doesn't match, update it.
+                val updatedLocalUser = localUser.copy(id = firebaseUser.uid)
+                userDao.update(updatedLocalUser)
+                Log.d("DatabaseAuthService", "Updated local user UID for existing Firebase user in getCurrentUser.")
             }
+            User(firebaseUser.uid, firebaseUser.email)
         } else {
             // No Firebase user, check local preferences as a fallback
             val userEmail = prefs.getString(USER_EMAIL_KEY, null)
