@@ -2,7 +2,6 @@ package com.example.budgify.screen
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.location.Geocoder
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,18 +18,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -42,7 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -66,17 +61,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.budgify.applicationlogic.FinanceViewModel
@@ -90,7 +81,6 @@ import com.example.budgify.routes.ScreenRoutes
 import com.example.budgify.viewmodel.TransactionsViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -99,10 +89,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -161,8 +148,6 @@ fun TransactionsScreen(
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
                     ) {
                         Icon(Icons.Default.CalendarToday, contentDescription = null)
-                        //Spacer(Modifier.size(8.dp))
-                        //Text("List")
                     }
                     SegmentedButton(
                         selected = isMapMode,
@@ -170,15 +155,14 @@ fun TransactionsScreen(
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
                     ) {
                         Icon(Icons.Default.Map, contentDescription = null)
-                        //Spacer(Modifier.size(8.dp))
-                        //Text("Map")
                     }
                 }
             }
 
             if (isMapMode) {
                 TransactionsMapView(
-                    transactions = allTransactions
+                    transactions = allTransactions,
+                    onTransactionLongClick = { transactionsViewModel.onTransactionLongClicked(it) }
                 )
             } else {
                 LazyColumn(
@@ -252,7 +236,8 @@ fun TransactionsScreen(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun TransactionsMapView(
-    transactions: List<TransactionWithDetails>
+    transactions: List<TransactionWithDetails>,
+    onTransactionLongClick: (com.example.budgify.entities.MyTransaction) -> Unit
 ) {
     val locationPermissionsState = rememberMultiplePermissionsState(
         permissions = listOf(
@@ -302,7 +287,10 @@ fun TransactionsMapView(
                 Marker(
                     state = MarkerState(position = LatLng(t.latitude, t.longitude)),
                     title = t.description,
-                    snippet = "${t.amount}€ - ${t.date}"
+                    snippet = "${t.amount}€ - ${t.date}",
+                    onInfoWindowLongClick = {
+                        onTransactionLongClick(t)
+                    }
                 )
             }
         }
@@ -687,200 +675,6 @@ fun EditTransactionDialog(
             }
         ) {
             DatePicker(state = datePickerState)
-        }
-    }
-}
-
-@SuppressLint("MissingPermission")
-@OptIn(ExperimentalPermissionsApi::class)
-@Composable
-fun LocationPickerDialog(
-    initialLocation: LatLng?,
-    onDismiss: () -> Unit,
-    onLocationSelected: (LatLng) -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val focusManager = LocalFocusManager.current
-    
-    val locationPermissionsState = rememberMultiplePermissionsState(
-        permissions = listOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-    )
-
-    var isMyLocationEnabled by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        if (!locationPermissionsState.allPermissionsGranted) {
-            locationPermissionsState.launchMultiplePermissionRequest()
-        }
-    }
-    
-    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
-        isMyLocationEnabled = locationPermissionsState.allPermissionsGranted
-    }
-
-    val cameraPositionState = rememberCameraPositionState {
-        // Default to Rome or initial location
-        val target = initialLocation ?: LatLng(41.9028, 12.4964)
-        position = CameraPosition.fromLatLngZoom(target, 15f)
-    }
-
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearching by remember { mutableStateOf(false) }
-    var searchError by remember { mutableStateOf<String?>(null) }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false) // Full screen ish
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Pick Location", style = MaterialTheme.typography.titleLarge)
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
-                    }
-                }
-                
-                // Search Bar
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        label = { Text("Search Place") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                             focusManager.clearFocus()
-                             if (searchQuery.isNotBlank()) {
-                                 isSearching = true
-                                 searchError = null
-                                 scope.launch(Dispatchers.IO) {
-                                     try {
-                                         val geocoder = Geocoder(context)
-                                         // Deprecated in API 33 but usually works or needs listener. 
-                                         // For simplicity using blocking list for now, or fallback.
-                                         @Suppress("DEPRECATION")
-                                         val addresses = geocoder.getFromLocationName(searchQuery, 1)
-                                         if (!addresses.isNullOrEmpty()) {
-                                             val location = addresses[0]
-                                             val latLng = LatLng(location.latitude, location.longitude)
-                                             withContext(Dispatchers.Main) {
-                                                 cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
-                                                 isSearching = false
-                                             }
-                                         } else {
-                                              withContext(Dispatchers.Main) {
-                                                  searchError = "Place not found"
-                                                  isSearching = false
-                                              }
-                                         }
-                                     } catch (e: IOException) {
-                                          withContext(Dispatchers.Main) {
-                                              searchError = "Network error"
-                                              isSearching = false
-                                          }
-                                     }
-                                 }
-                             }
-                        }),
-                        trailingIcon = {
-                            IconButton(onClick = {
-                                // Trigger search same as above
-                                 focusManager.clearFocus()
-                                 if (searchQuery.isNotBlank()) {
-                                     isSearching = true
-                                     searchError = null
-                                     scope.launch(Dispatchers.IO) {
-                                         try {
-                                             val geocoder = Geocoder(context)
-                                             @Suppress("DEPRECATION")
-                                             val addresses = geocoder.getFromLocationName(searchQuery, 1)
-                                             if (!addresses.isNullOrEmpty()) {
-                                                 val location = addresses[0]
-                                                 val latLng = LatLng(location.latitude, location.longitude)
-                                                 withContext(Dispatchers.Main) {
-                                                     cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
-                                                     isSearching = false
-                                                 }
-                                             } else {
-                                                  withContext(Dispatchers.Main) {
-                                                      searchError = "Place not found"
-                                                      isSearching = false
-                                                  }
-                                             }
-                                         } catch (e: IOException) {
-                                              withContext(Dispatchers.Main) {
-                                                  searchError = "Network error"
-                                                  isSearching = false
-                                              }
-                                         }
-                                     }
-                                 }
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = "Search")
-                            }
-                        }
-                    )
-                }
-                if (searchError != null) {
-                    Text(
-                        searchError!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-                
-                // Map
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    GoogleMap(
-                        modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = cameraPositionState,
-                        properties = MapProperties(isMyLocationEnabled = isMyLocationEnabled),
-                        uiSettings = MapUiSettings(myLocationButtonEnabled = true, zoomControlsEnabled = true)
-                    )
-                    
-                    // Center Marker
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = "Center",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(48.dp).align(Alignment.Center).padding(bottom = 24.dp) // Offset slightly up to match pin tip
-                    )
-                }
-                
-                // Footer
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Button(
-                        onClick = {
-                            onLocationSelected(cameraPositionState.position.target)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Confirm Location")
-                    }
-                }
-            }
         }
     }
 }

@@ -255,7 +255,7 @@ fun Homepage(navController: NavController, viewModel: FinanceViewModel, homepage
             onDismiss = { homepageViewModel.onDismissChartDetailDialog() }
         )
     }
-
+    
     if (uiState.showLocationPickerDialog) {
         LocationPickerDialog(
             initialLocation = if (uiState.editDialogState.latitude != null && uiState.editDialogState.longitude != null) {

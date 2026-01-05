@@ -1,8 +1,8 @@
 package com.example.budgify
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -16,11 +16,25 @@ import com.example.budgify.navigation.NavGraph
 import com.example.budgify.ui.theme.BudgifyTheme
 import com.example.budgify.userpreferences.ThemePreferenceManager
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.libraries.places.api.Places
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize Places API
+        try {
+            val appInfo = packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+            val apiKey = appInfo.metaData?.getString("com.google.android.geo.API_KEY")
+            if (!apiKey.isNullOrEmpty()) {
+                if (!Places.isInitialized()) {
+                    Places.initialize(applicationContext, apiKey)
+                }
+            }
+        } catch (e: PackageManager.NameNotFoundException) {
+            e.printStackTrace()
+        }
         
         val themePreferenceManager = ThemePreferenceManager(this)
 
