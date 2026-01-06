@@ -1382,8 +1382,14 @@ fun AddLoanDialog(
                     onClick = {
                         showDatePickerDialog = false
                         datePickerState.selectedDateMillis?.let {
-                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                            val newDate = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                            if (datePickerTarget == "START") {
+                                selectedStartDate = newDate
+                            } else if (datePickerTarget == "END") {
+                                selectedEndDate = newDate
+                            }
                         }
+                        datePickerTarget = null
                     },
                     enabled = confirmEnabled.value
                 ) {
